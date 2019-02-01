@@ -56,7 +56,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
 
   private val db = openDB(settings.dataDirectory)
 
-  private val LocalScoreBroadcastDebounce = 1.second
+  private val LocalScoreBroadcastDebounce = 2.second
 
   private val blockchainUpdater = StorageFactory(settings, db, time)
 
@@ -149,7 +149,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
 
     val (syncWithChannelClosed, scoreStatsReporter) = RxScoreObserver(
       settings.synchronizationSettings.scoreTTL,
-      1.second,
+      2.second,
       blockchainUpdater.score,
       lastScore,
       blockchainScores,
