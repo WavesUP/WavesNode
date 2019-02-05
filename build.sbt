@@ -52,6 +52,32 @@ inThisBuild(
     scalacOptions ++= Seq("-feature", "-deprecation", "-language:higherKinds", "-language:implicitConversions", "-Ywarn-unused:-implicits", "-Xlint")
   ))
 
+lazy val publishSettings = Seq(
+  organization := "com.github.karasiq",
+  publishMavenStyle := true,
+  publishTo := {
+    val nexus = "https://oss.sonatype.org/"
+    if (isSnapshot.value)
+      Some("snapshots" at nexus + "content/repositories/snapshots")
+    else
+      Some("releases" at nexus + "service/local/staging/deploy/maven2")
+  },
+  publishArtifact in Test := false,
+  pomIncludeRepository := { _ ⇒
+    false
+  },
+  licenses := Seq("The MIT License" → url("http://opensource.org/licenses/MIT")),
+  homepage := Some(url("https://github.com/wavesplatform/Waves")),
+  pomExtra :=
+    <developers>
+      <developer>
+        <id>wavesplatform</id>
+        <name>Waves Platform</name>
+        <url>https://github.com/wavesplatform</url>
+      </developer>
+    </developers>
+)
+
 resolvers ++= Seq(
   Resolver.bintrayRepo("ethereum", "maven"),
   Resolver.bintrayRepo("dnvriend", "maven"),
@@ -232,6 +258,7 @@ checkPRRaw in Global := {
 lazy val common = crossProject(JSPlatform, JVMPlatform)
   .withoutSuffixFor(JVMPlatform)
   .settings(
+    publishSettings,
     libraryDependencies ++= Dependencies.scalatest
   )
 
@@ -242,6 +269,7 @@ lazy val lang =
   crossProject(JSPlatform, JVMPlatform)
     .withoutSuffixFor(JVMPlatform)
     .settings(
+      publishSettings,
       version := "1.0.0",
       coverageExcludedPackages := ".*",
       // the following line forces scala version across all dependencies
@@ -298,6 +326,7 @@ lazy val langJVM = lang.jvm.dependsOn(commonJVM)
 lazy val node = project
   .in(file("."))
   .settings(
+    publishSettings,
     addCompilerPlugin(Dependencies.kindProjector),
     coverageExcludedPackages := "",
     libraryDependencies ++=
@@ -319,7 +348,7 @@ lazy val node = project
   )
   .dependsOn(langJVM, commonJVM)
 
-lazy val discovery = project
+// lazy val discovery = project
 
 lazy val it = project
   .dependsOn(node)
