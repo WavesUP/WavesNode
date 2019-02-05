@@ -54,6 +54,9 @@ inThisBuild(
 
 lazy val publishSettings = Seq(
   organization := "com.github.karasiq",
+  version := version.value.split('-').head,
+  crossPaths := true,
+  isSnapshot := false,
   publishMavenStyle := true,
   publishTo := {
     val nexus = "https://oss.sonatype.org/"
@@ -133,8 +136,8 @@ inTask(assembly)(
 inConfig(Compile)(
   Seq(
     mainClass := Some("com.wavesplatform.Application"),
-    publishArtifact in packageDoc := false,
-    publishArtifact in packageSrc := false,
+    // publishArtifact in packageDoc := false,
+    // publishArtifact in packageSrc := false,
     sourceGenerators += versionSource
   ))
 
@@ -300,7 +303,7 @@ lazy val lang =
     )
     .jvmSettings(
       coverageExcludedPackages := "",
-      publishMavenStyle := true,
+      /* publishMavenStyle := true,
       credentials += Credentials(Path.userHome / ".sbt" / ".credentials"),
       publishTo := Some("Sonatype Nexus" at "https://oss.sonatype.org/service/local/staging/deploy/maven2"),
       name := "RIDE Compiler",
@@ -312,7 +315,7 @@ lazy val lang =
       organizationName := "Waves Platform",
       organizationHomepage := Some(url("https://wavesplatform.com")),
       scmInfo := Some(ScmInfo(url("https://github.com/wavesplatform/Waves"), "git@github.com:wavesplatform/Waves.git", None)),
-      developers := List(Developer("petermz", "Peter Zhelezniakov", "peterz@rambler.ru", url("https://wavesplatform.com"))),
+      developers := List(Developer("petermz", "Peter Zhelezniakov", "peterz@rambler.ru", url("https://wavesplatform.com"))), */
       libraryDependencies ++= Dependencies.meta ++
         Seq(
           "org.scala-js"                      %% "scalajs-stubs" % "1.0.0-RC1" % "provided",
