@@ -115,7 +115,8 @@ object Dependencies {
     Seq(
       // "com.google.protobuf" % "protobuf-java" % "3.4.0",
       "com.thesamet.scalapb" %%% "scalapb-runtime" % version,
-      "com.thesamet.scalapb" %%% "scalapb-runtime" % version % "protobuf"
+      "com.thesamet.scalapb" %%% "scalapb-runtime" % version % "protobuf",
+      "com.thesamet.scalapb" %% "scalapb-json4s" % "0.7.0"
     )
   }
 }
