@@ -338,7 +338,8 @@ lazy val node = project
         Dependencies.protobuf.value,
     PB.targets in Compile := Seq(
       scalapb.gen() → (sourceManaged in Compile).value
-    )
+    ),
+    sourceGenerators in Compile += versionSource
   )
   .dependsOn(langJVM, commonJVM)
 
