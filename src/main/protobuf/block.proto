@@ -6,27 +6,52 @@ import "transactions.proto";
 
 option (scalapb.options) = {
     import: "com.wavesplatform.serialization.protobuf.utils._"
-    flat_package: true
 };
 
+message Signed {
+    repeated bytes proofs = 1;
+    // @todo проверить, можно ли проверить подпись у body
+    // получив его в виде сырых байт
+    oneof body {
+        bytes bytes = 1;
+        Block block = 2;
+        Transaction t = 3;
+        // ...
+    }
+
+    // @todo 2 попробовать перепаковывать протобаф-сообщения
+    // в детерминированные байты перед подписью (тоже в протобаф сообщение?)
+}
+
+message Sig {
+
+}
+message Any {
+    // ...
+}
+
+//message Address {
+//
+//}
+
 message Block {
+    repeated Transaction transactions = 1;
+
     option (scalapb.message).companion_extends = "com.wavesplatform.block.protobuf.PBBlockCompanionBase";
 
     bytes reference = 1 [(scalapb.field).type = "com.wavesplatform.common.state.ByteStr"];
-    SignerData signerData = 2;
-    ConsensusData consensusData = 3;
-    repeated Transaction transactions = 4;
-    repeated uint32 featureVotes = 5 [(scalapb.field).collection_type = "scala.collection.immutable.Set"];
+
+    repeated uint32 featureVotes = 5;
+
     uint64 timestamp = 6;
     uint32 version = 7;
 
-    message SignerData {
+    // более плоская структура
         bytes generator = 1 [(scalapb.field).type = "com.wavesplatform.account.PublicKeyAccount"];
         bytes signature = 2 [(scalapb.field).type = "com.wavesplatform.common.state.ByteStr"];
-    };
 
-    message ConsensusData {
         uint64 baseTarget = 1;
         bytes generationSignature = 2 [(scalapb.field).type = "com.wavesplatform.common.state.ByteStr"];
-    };
+
+
 };
