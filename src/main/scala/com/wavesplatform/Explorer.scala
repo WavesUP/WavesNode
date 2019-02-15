@@ -12,7 +12,7 @@ import com.wavesplatform.common.utils.{Base58, Base64, EitherExt2}
 import com.wavesplatform.database.{Keys, LevelDBWriter}
 import com.wavesplatform.db.openDB
 import com.wavesplatform.settings.{WavesSettings, loadConfig}
-import com.wavesplatform.state.{Height, TxNum}
+import com.wavesplatform.state.{Height, TransactionId, TxNum}
 import com.wavesplatform.transaction.{Transaction, TransactionParsers}
 import com.wavesplatform.utils.ScorexLogging
 import monix.execution.UncaughtExceptionReporter
@@ -226,6 +226,90 @@ object Explorer extends ScorexLogging {
           for ((prefix, stats) <- result.asScala) {
             log.info(s"${keys(prefix)},${stats.entryCount},${stats.totalKeySize},${stats.totalValueSize}")
           }
+
+        case "TXCONS" =>
+          import database._
+
+          val heightArg = Height(args(2).toInt)
+
+          val currHeight = db.get(Keys.height)
+
+          val missed = new ListBuffer[(Height, TxNum, Transaction)]()
+
+          val missedKeys = new ListBuffer[Array[Byte]]()
+
+          val keys = new ListBuffer[Array[Byte]]()
+
+          for (h <- heightArg to currHeight) {
+            val header = db.get(Keys.blockHeaderAndSizeAt(Height(h))).get._1
+
+            val pref = ByteBuffer
+              .allocate(6)
+              .putShort(Keys.TransactionInfoPrefix)
+              .putInt(h)
+              .array()
+
+            var txInfoCount = 0
+            var txHNCount   = 0
+
+            val txId_2 = TransactionId(ByteStr(Base58.decode("2JiguPfWHNHHB8h1t2BESpcqgTJxQ7PZKFTaZLZQWiE4").get))
+
+            db.iterateOver(pref) { entry =>
+              txInfoCount += 1
+
+              val num = TxNum(Shorts.fromByteArray(entry.getKey.drop(6)))
+
+              val tx = TransactionParsers.parseBytes(entry.getValue).get
+
+              val txId = TransactionId(tx.id())
+
+              if (txId == txId_2)
+                println(s"Height: $h Num: $num")
+
+              val maybeHN = db.get(Keys.transactionHNById(txId))
+
+              if (maybeHN.isEmpty) {
+                missedKeys.append(Keys.transactionHNById(txId).keyBytes)
+                missed.append((Height(h), num, tx))
+                if (db.db.get(Keys.transactionHNById(txId).keyBytes) != null) println(s"Alert! ${txId}")
+              } else
+                txHNCount += 1
+            }
+
+            val nothingMissed =
+              header.transactionCount == txInfoCount &&
+                header.transactionCount == txInfoCount &&
+                header.transactionCount == txHNCount
+
+            if (!nothingMissed)
+              println(s"H: $h TxN: ${header.transactionCount} TxInfo-DB: $txInfoCount TxHN-DB: $txHNCount")
+            else if (h % 1000 == 0)
+              println(s"Processed $h")
+
+          }
+//          missed.foreach(tx => println(tx.id().base58))
+
+          println("Found all missed txs")
+//
+//          val missedKeySet = missedKeys.toSet
+//
+//          if (missedKeySet.size != missedKeys.length) {
+//            println("ALERT!")
+//            missedKeys.foreach(arr => println(Base58.encode(arr)))
+//            return
+//          }
+//
+//          var cnt: Long = 0
+//
+//          db.iterateOver(Array.emptyByteArray) { e =>
+//            cnt += 1
+//
+//            if (missedKeySet contains e.getKey)
+//              println(s"Collision: ${Base64.encode(e.getKey)}")
+//
+//            if (cnt % 10000 == 0)
+//              println(s"Processed $cnt keys")
+//          }
 
         case "TXBH" =>
           val txs = new ListBuffer[(TxNum, Transaction)]

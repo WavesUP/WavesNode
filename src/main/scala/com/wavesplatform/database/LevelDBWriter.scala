@@ -368,8 +368,11 @@ class LevelDBWriter(writableDB: DB,
     }
 
     for ((id, (tx, num)) <- transactions) {
+      log.info(s"INSERT: ($height, $num, $id)")
       rw.put(Keys.transactionAt(Height(height), num), Some(tx))
+      log.info(s"INSERT: ($height, $num) for $id")
       rw.put(Keys.transactionHNById(id), Some((Height(height), num)))
+      log.info(s"INSERT ($height) Completed")
     }
 
     val activationWindowSize = fs.activationWindowSize(height)
@@ -515,8 +518,11 @@ class LevelDBWriter(writableDB: DB,
               }
 
               if (tx.builder.typeId != GenesisTransaction.typeId) {
+                log.info(s"REMOVE: Transaction at ($h, $num, ${tx.id()})")
                 rw.delete(Keys.transactionAt(h, num))
+                log.info(s"REMOVE: Transaction (H, n) for ${tx.id()}")
                 rw.delete(Keys.transactionHNById(TransactionId(tx.id())))
+                log.info(s"REMOVE ($h) Completed")
               }
           }
 
