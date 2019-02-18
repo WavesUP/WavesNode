@@ -103,14 +103,18 @@ abstract class Caches(portfolioChanged: Observer[Address]) extends Blockchain wi
   private var oldestStoredBlockTimestamp             = Long.MaxValue
   private val transactionIds                         = new util.HashMap[ByteStr, Int]() // TransactionId -> height
   protected def forgetTransaction(id: ByteStr): Unit = transactionIds.remove(id)
-  override def containsTransaction(tx: Transaction): Boolean = transactionIds.containsKey(tx.id()) || {
-    if (tx.timestamp - 2.hours.toMillis <= oldestStoredBlockTimestamp) {
-      LevelDBStats.miss.record(1)
-      transactionHeight(tx.id()).nonEmpty
-    } else {
-      false
+  override def containsTransaction(tx: Transaction): Boolean =
+    transactionIds.containsKey(tx.id()) || transactionHeight(tx.id()).nonEmpty
+  /*
+    transactionIds.containsKey(tx.id()) || {
+      if (tx.timestamp - 2.hours.toMillis <= oldestStoredBlockTimestamp) {
+        LevelDBStats.miss.record(1)
+        transactionHeight(tx.id()).nonEmpty
+      } else {
+        false
+      }
     }
-  }
+   */
   protected def forgetBlocks(): Unit = {
     val iterator = blocksTs.entrySet().iterator()
     val (oldestBlock, oldestTs) = if (iterator.hasNext) {
