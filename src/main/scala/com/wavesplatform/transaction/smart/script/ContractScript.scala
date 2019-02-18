@@ -13,7 +13,7 @@ import monix.eval.Coeval
 
 object ContractScript {
 
-  private val maxComplexity = 20 * functionCosts(V1)(FunctionHeader.Native(SIGVERIFY))()
+  private val maxComplexity = 100 * functionCosts(V1)(FunctionHeader.Native(SIGVERIFY))()
 
   def apply(version: StdLibVersion, contract: Contract): Either[String, Script] = {
     for {

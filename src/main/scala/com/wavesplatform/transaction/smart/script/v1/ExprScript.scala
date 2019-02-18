@@ -15,7 +15,7 @@ import scala.collection.mutable._
 
 object ExprScript {
   val checksumLength         = 4
-  private val maxComplexity  = 20 * functionCosts(V1)(FunctionHeader.Native(SIGVERIFY))()
+  private val maxComplexity  = 100 * functionCosts(V1)(FunctionHeader.Native(SIGVERIFY))()
   private val maxSizeInBytes = 8 * 1024
 
   def validateBytes(bs: Array[Byte]): Either[String, Unit] =
