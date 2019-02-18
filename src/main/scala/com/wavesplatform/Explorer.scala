@@ -252,33 +252,19 @@ object Explorer extends ScorexLogging {
             var txInfoCount = 0
             var txHNCount   = 0
 
-            val txId_2 = TransactionId(ByteStr(Base58.decode("2JiguPfWHNHHB8h1t2BESpcqgTJxQ7PZKFTaZLZQWiE4").get))
-
             db.iterateOver(pref) { entry =>
               txInfoCount += 1
 
-              val num = TxNum(Shorts.fromByteArray(entry.getKey.drop(6)))
+              val txId = TransactionParsers.parseBytes(entry.getValue).get.id()
 
-              val tx = TransactionParsers.parseBytes(entry.getValue).get
+              val maybeHN = db.get(Keys.transactionHNById(TransactionId(txId)))
 
-              val txId = TransactionId(tx.id())
-
-              if (txId == txId_2)
-                println(s"Height: $h Num: $num")
-
-              val maybeHN = db.get(Keys.transactionHNById(txId))
-
-              if (maybeHN.isEmpty) {
-                missedKeys.append(Keys.transactionHNById(txId).keyBytes)
-                missed.append((Height(h), num, tx))
-                if (db.db.get(Keys.transactionHNById(txId).keyBytes) != null) println(s"Alert! ${txId}")
-              } else
+              if (maybeHN.nonEmpty)
                 txHNCount += 1
             }
 
             val nothingMissed =
               header.transactionCount == txInfoCount &&
-                header.transactionCount == txInfoCount &&
                 header.transactionCount == txHNCount
 
             if (!nothingMissed)
@@ -287,29 +273,8 @@ object Explorer extends ScorexLogging {
               println(s"Processed $h")
 
           }
-//          missed.foreach(tx => println(tx.id().base58))
 
           println("Found all missed txs")
-//
-//          val missedKeySet = missedKeys.toSet
-//
-//          if (missedKeySet.size != missedKeys.length) {
-//            println("ALERT!")
-//            missedKeys.foreach(arr => println(Base58.encode(arr)))
-//            return
-//          }
-//
-//          var cnt: Long = 0
-//
-//          db.iterateOver(Array.emptyByteArray) { e =>
-//            cnt += 1
-//
-//            if (missedKeySet contains e.getKey)
-//              println(s"Collision: ${Base64.encode(e.getKey)}")
-//
-//            if (cnt % 10000 == 0)
-//              println(s"Processed $cnt keys")
-//          }
 
         case "TXBH" =>
           val txs = new ListBuffer[(TxNum, Transaction)]
