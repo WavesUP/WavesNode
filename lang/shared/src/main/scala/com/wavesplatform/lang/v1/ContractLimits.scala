@@ -1,10 +1,10 @@
 package com.wavesplatform.lang.v1
 
 object ContractLimits {
-  val MaxExprComplexity  = 20 * 100
+  val MaxExprComplexity  = 30 * 100
   val MaxExprSizeInBytes = 8 * 1024
 
-  val MaxContractComplexity  = 10000
+  val MaxContractComplexity  = 4000
   val MaxContractSizeInBytes = 32 * 1024
 
   // As in Scala
