@@ -1,8 +1,8 @@
 package com.wavesplatform.lang.v1.evaluator.ctx.impl
 
-import java.nio.ByteBuffer
-import java.nio.charset.StandardCharsets
 import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.charset.{MalformedInputException, StandardCharsets}
+import java.nio.{BufferUnderflowException, ByteBuffer}
 
 import cats.data.EitherT
 import cats.kernel.Monoid
@@ -16,7 +16,7 @@ import com.wavesplatform.lang.v1.evaluator.ctx._
 import com.wavesplatform.lang.v1.parser.BinaryOperation
 import com.wavesplatform.lang.v1.parser.BinaryOperation._
 
-import scala.collection.mutable.ArrayBuffer
+import scala.annotation.tailrec
 import scala.util.{Success, Try}
 
 object PureContext {
@@ -78,9 +78,10 @@ object PureContext {
     case _                      => Left(defaultThrowMessage)
   }
 
-  lazy val throwNoMessage: BaseFunction = UserFunction("throw", Map[StdLibVersion, Long](V1 -> 2, V2 -> 2, V3 -> 1, V4 -> 1), NOTHING, "Fail script") {
-    FUNCTION_CALL(throwWithMessage, List(CONST_STRING(defaultThrowMessage)))
-  }
+  lazy val throwNoMessage: BaseFunction =
+    UserFunction("throw", Map[StdLibVersion, Long](V1 -> 2, V2 -> 2, V3 -> 1, V4 -> 1), NOTHING, "Fail script") {
+      FUNCTION_CALL(throwWithMessage, List(CONST_STRING(defaultThrowMessage)))
+    }
 
   lazy val extract: BaseFunction =
     UserFunction.deprecated("extract",
@@ -305,14 +306,22 @@ object PureContext {
 
   lazy val toUtf8String: BaseFunction =
     NativeFunction("toUtf8String", 20, UTF8STRING, STRING, "Convert UTF8 bytes to string", ("u", BYTESTR, "utf8")) {
-      case CONST_BYTESTR(u) :: Nil => Try(CONST_STRING(UTF8Decoder.decode(ByteBuffer.wrap(u.arr)).toString)).toEither.left.map(_.toString)
-      case xs                      => notImplemented("toUtf8String(u: byte[])", xs)
+      case CONST_BYTESTR(u) :: Nil =>
+        Try(CONST_STRING(UTF8Decoder.decode(ByteBuffer.wrap(u.arr)).toString)).toEither.left.map {
+          case _: MalformedInputException => "Input contents invalid UTD8 sequence"
+          case e                          => e.toString
+        }
+      case xs => notImplemented("toUtf8String(u: byte[])", xs)
     }
 
   lazy val toLong: BaseFunction =
     NativeFunction("toInt", 10, BININT, LONG, "Deserialize big endian 8-bytes value", ("bin", BYTESTR, "8-bytes BE binaries")) {
-      case CONST_BYTESTR(u) :: Nil => Try(CONST_LONG(ByteBuffer.wrap(u.arr).getLong())).toEither.left.map(_.toString)
-      case xs                      => notImplemented("toInt(u: byte[])", xs)
+      case CONST_BYTESTR(u) :: Nil =>
+        Try(CONST_LONG(ByteBuffer.wrap(u.arr).getLong())).toEither.left.map {
+          case _: BufferUnderflowException => "Buffer underflow"
+          case e                           => e.toString
+        }
+      case xs => notImplemented("toInt(u: byte[])", xs)
     }
 
   lazy val toLongOffset: BaseFunction =
@@ -325,7 +334,10 @@ object PureContext {
                    ("offet", LONG, "bytes offset")) {
       case CONST_BYTESTR(ByteStr(u)) :: CONST_LONG(o) :: Nil =>
         if (o >= 0 && o <= u.size - 8) {
-          Try(CONST_LONG(ByteBuffer.wrap(u).getLong(o.toInt))).toEither.left.map(_.toString)
+          Try(CONST_LONG(ByteBuffer.wrap(u).getLong(o.toInt))).toEither.left.map {
+            case _: BufferUnderflowException => "Buffer underflow"
+            case e                           => e.toString
+          }
         } else {
           Left("IndexOutOfBounds")
         }
@@ -377,17 +389,6 @@ object PureContext {
       case xs => notImplemented("indexOf(STRING, STRING)", xs)
     }
 
-  def split(m: String, sep: String, buffer: ArrayBuffer[CONST_STRING] = ArrayBuffer[CONST_STRING](), start: Int = 0): IndexedSeq[CONST_STRING] = {
-    m.indexOf(sep, start) match {
-      case -1 =>
-        buffer += CONST_STRING(m.substring(start))
-        buffer.result
-      case n =>
-        buffer += CONST_STRING(m.substring(0, n))
-        split(m, sep, buffer, n + sep.length)
-    }
-  }
-
   lazy val splitStr: BaseFunction =
     NativeFunction("split",
                    100,
@@ -396,19 +397,43 @@ object PureContext {
                    "split string by separator",
                    ("str", STRING, "String for splitting"),
                    ("separator", STRING, "separator")) {
-      case CONST_STRING(m) :: CONST_STRING(sep) :: Nil => Right(ARR(split(m, sep)))
-      case xs                                          => notImplemented("split(STRING, STRING)", xs)
+      case CONST_STRING(str) :: CONST_STRING(sep) :: Nil => Right(ARR(split(str, sep).map(CONST_STRING)))
+      case xs                                            => notImplemented("split(STRING, STRING)", xs)
     }
+
+  private def split(str: String, sep: String) =
+    if (str == "") seqWithEmptyStr
+    else if (sep == "") 1 to str.length map (i => String.valueOf(str.charAt(i - 1)))
+    else splitRec(str, sep).reverse.toIndexedSeq
+
+  private val seqWithEmptyStr = IndexedSeq("")
+
+  @tailrec private def splitRec(
+      str: String,
+      sep: String,
+      offset: Int = 0,
+      splitted: List[String] = Nil
+  ): List[String] = {
+    val index = str.indexOf(sep, offset)
+    if (index == -1) str.substring(offset, str.length) :: splitted
+    else
+      splitRec(
+        str,
+        sep,
+        index + sep.length,
+        str.substring(offset, index) :: splitted
+      )
+  }
 
   lazy val parseInt: BaseFunction =
     NativeFunction("parseInt", 20, PARSEINT, optionLong, "parse string to integer", ("str", STRING, "String for parsing")) {
-      case CONST_STRING(u) :: Nil => Try(CONST_LONG(u.toInt)).orElse(Success(unit)).toEither.left.map(_.toString)
+      case CONST_STRING(u) :: Nil => Try(CONST_LONG(u.toLong)).orElse(Success(unit)).toEither.left.map(_.toString)
       case xs                     => notImplemented("parseInt(STRING)", xs)
     }
 
   lazy val parseIntVal: BaseFunction =
     NativeFunction("parseIntValue", 20, PARSEINTV, LONG, "parse string to integer with fail on errors", ("str", STRING, "String for parsing")) {
-      case CONST_STRING(u) :: Nil => Try(CONST_LONG(u.toInt)).toEither.left.map(_.toString)
+      case CONST_STRING(u) :: Nil => Try(CONST_LONG(u.toLong)).toEither.left.map(_.toString)
       case xs                     => notImplemented("parseInt(STRING)", xs)
     }
 

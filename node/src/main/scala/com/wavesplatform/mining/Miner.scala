@@ -111,7 +111,7 @@ class MinerImpl(allChannels: ChannelGroup,
         blockchainSettings.genesisSettings.averageBlockDelay,
         refBlockBT,
         refBlockTS,
-        blockchainUpdater.parent(lastBlock, 2).map(_.timestamp),
+        blockchainUpdater.parentHeader(lastBlock, 2).map(_.timestamp),
         currentTime
       )
       .leftMap(_.toString)

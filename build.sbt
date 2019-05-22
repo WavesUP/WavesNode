@@ -15,7 +15,7 @@ lazy val common = crossProject(JSPlatform, JVMPlatform)
   .withoutSuffixFor(JVMPlatform)
   .disablePlugins(ProtocPlugin)
   .settings(
-    libraryDependencies += Dependencies.scalaTest,
+    libraryDependencies ++= Dependencies.common.value,
     coverageExcludedPackages := ""
   )
 
@@ -144,7 +144,8 @@ inScope(Global)(
     concurrentRestrictions := {
       val threadNumber = Option(System.getenv("SBT_THREAD_NUMBER")).fold(1)(_.toInt)
       Seq(Tags.limit(Tags.ForkedTestGroup, threadNumber))
-    }
+    },
+    network := Network(sys.props.get("network"))
   ))
 
 // ThisBuild options
@@ -165,12 +166,10 @@ packageAll := Def
   .sequential(
     root / cleanAll,
     Def.task {
-      (node / Compile / compile).value
-      (dex / Compile / compile).value
-    },
-    Def.task {
+      (node /  assembly).value
       (node / Debian / packageBin).value
       (dex / Universal / packageZipTarball).value
+    (`grpc-server` /Universal / packageZipTarball).value
     }
   )
   .value

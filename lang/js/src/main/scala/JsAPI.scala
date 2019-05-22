@@ -61,7 +61,8 @@ object JsAPI {
         override def transactionById(id: Array[Byte]): Option[Tx]                                                    = ???
         override def transactionHeightById(id: Array[Byte]): Option[Long]                                            = ???
         override def assetInfoById(id: Array[Byte]): Option[ScriptAssetInfo]                                         = ???
-        override def lastBlockOpt(): Option[BlockInfo]                                                                  = ???
+        override def lastBlockOpt(): Option[BlockInfo]                                                               = ???
+        override def blockInfoByHeight(height: Int): Option[BlockInfo]                                               = ???
         override def data(addressOrAlias: Recipient, key: String, dataType: DataType): Option[Any]                   = ???
         override def accountBalanceOf(addressOrAlias: Recipient, assetId: Option[Array[Byte]]): Either[String, Long] = ???
         override def resolveAlias(name: String): Either[String, Recipient.Address]                                   = ???
@@ -73,8 +74,8 @@ object JsAPI {
       }
     )
 
-  private val cryptoContext                        = CryptoContext.build(Global)
-  private val letBLockVersions: Set[StdLibVersion] = Set(V1, V2)
+  private def cryptoContext(version: StdLibVersion) = CryptoContext.build(Global, version)
+  private val letBLockVersions: Set[StdLibVersion]  = Set(V1, V2)
 
   private def typeRepr(t: TYPE): js.Any = t match {
     case UNION(l, _) => l.map(typeRepr).toJSArray
@@ -88,11 +89,11 @@ object JsAPI {
     buildContractContext(V3)
 
   private def buildScriptContext(v: StdLibVersion, isTokenContext: Boolean, isContract: Boolean): CTX = {
-    Monoid.combineAll(Seq(PureContext.build(v), cryptoContext, wavesContext(v, isTokenContext, isContract)))
+    Monoid.combineAll(Seq(PureContext.build(v), cryptoContext(v), wavesContext(v, isTokenContext, isContract)))
   }
 
   private def buildContractContext(v: StdLibVersion): CTX = {
-    Monoid.combineAll(Seq(PureContext.build(v), cryptoContext, wavesContext(V3, false, true)))
+    Monoid.combineAll(Seq(PureContext.build(v), cryptoContext(v), wavesContext(v, false, true)))
   }
 
   @JSExportTopLevel("getTypes")
@@ -197,9 +198,8 @@ object JsAPI {
 
   @JSExportTopLevel("decompile")
   def decompile(input: String): js.Dynamic = {
-    val decompiled = Global.decompile(input).right.map{
-      scriptText =>
-        js.Dynamic.literal("result" -> scriptText)
+    val decompiled = Global.decompile(input).right.map { scriptText =>
+      js.Dynamic.literal("result" -> scriptText)
     }
     decompiled.fold(
       err => js.Dynamic.literal("error" -> err.m),
