@@ -1,7 +1,7 @@
 package com.wavesplatform.lang.v1
 
 object ContractLimits {
-  val MaxExprComplexity  = 30 * 100
+  val MaxExprComplexity  = 40 * 100
   val MaxExprSizeInBytes = 8 * 1024
 
   val MaxContractComplexity  = 4000
