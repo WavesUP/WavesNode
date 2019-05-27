@@ -11,7 +11,7 @@ case class MiningConstraints(total: MiningConstraint, keyBlock: MiningConstraint
 
 object MiningConstraints {
   val MaxScriptRunsInBlock = 100000
-  val MaxScriptsComplexityInBlock = 1000000
+  val MaxScriptsComplexityInBlock = 2000000000
   val ClassicAmountOfTxsInBlock = 100
   val MaxTxsSizeInBytes = 1 * 1024 * 1024 // 1 megabyte
 
