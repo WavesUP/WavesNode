@@ -87,7 +87,7 @@ scriptClasspath += "*" // adds "$lib_dir/*" to app_classpath in the executable f
 // Logback creates a "waves.directory_UNDEFINED" without this option.
 bashScriptExtraDefines ++= Seq(
   s"""addJava "-Dwaves.network-name=${network.value}"""",
-  s"""addJava "-Dwaves.defaults.${network.value}.directory=/var/lib/${(Universal / normalizedName).value}"""",
+  s"""addJava "-Dwaves.defaults.${network.value}.directory=/var/lib/${(Universal / normalizedName).value}"""", // TODO: Test that logback uses correct directory
   s"""addJava "-Dwaves.defaults.${network.value}.config.directory=/etc/${(Universal / normalizedName).value}""""
 )
 
