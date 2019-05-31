@@ -52,9 +52,7 @@ package object settings {
       .withFallback(ConfigFactory.parseMap(Map("waves.directory" -> defaultDirectory).asJava))
 
     val networkDefaults = {
-      val withAppConf = external
-        .withFallback(ConfigFactory.defaultApplication())
-        .withFallback(ConfigFactory.defaultReference())
+      val withAppConf = external.withFallback(ConfigFactory.defaultApplication())
       val network = withAppConf.getString("waves.network-name")
       withAppConf.getConfig(s"waves.defaults.$network")
     }
