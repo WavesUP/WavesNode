@@ -53,7 +53,7 @@ package object settings {
 
     val networkDefaults = {
       val network = external.getString("waves.network-name")
-      external.getConfig(s"defaults.$network")
+      external.getConfig(s"waves.defaults.$network")
     }
 
     external
