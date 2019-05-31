@@ -99,7 +99,7 @@ case class GenesisSettings(blockTimestamp: Long,
                            initialBaseTarget: Long,
                            averageBlockDelay: FiniteDuration)
 
-object GenesisSettings {
+object GenesisSettings { // TODO: Move to network-defaults.conf
   val MAINNET = GenesisSettings(
     1460678400000L,
     1465742577614L,
