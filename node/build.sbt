@@ -93,7 +93,7 @@ bashScriptExtraDefines ++= Seq(
 
 inConfig(Universal)(
   Seq(
-    mappings += (baseDirectory.value / s"waves-${network.value}.conf" -> "doc/waves.conf.sample"),
+    // mappings += (baseDirectory.value / s"waves-${network.value}.conf" -> "doc/waves.conf.sample"),
     mappings := {
       val linuxScriptPattern = "bin/(.+)".r
       val batScriptPattern   = "bin/([^.]+)\\.bat".r
@@ -123,7 +123,8 @@ inConfig(Universal)(
       // probably can't use these with jstack and others tools
       "-J-XX:+PerfDisableSharedMem",
       "-J-XX:+ParallelRefProcEnabled",
-      "-J-XX:+UseStringDeduplication"
+      "-J-XX:+UseStringDeduplication",
+      s"-J-Dwaves.network-name=${network.value}"
     )
   ))
 
