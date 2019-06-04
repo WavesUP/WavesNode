@@ -371,7 +371,7 @@ object Application {
       case "import"  => Importer.main(args.tail)
       case "explore" => Explorer.main(args.tail)
       case "util"    => UtilApp.main(args.tail)
-      case _         => startNode(args.headOption)
+      case _         => startNode(args.headOption) // TODO: Consider adding option to specify network-name
     }
   }
 

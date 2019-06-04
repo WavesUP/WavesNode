@@ -57,7 +57,7 @@ package object settings {
     }
 
     external
-      .withFallback(networkDefaults)
+      .withFallback(networkDefaults.atKey("waves"))
       .withFallback(ConfigFactory.defaultApplication())
       .withFallback(ConfigFactory.defaultReference())
       .resolve()
