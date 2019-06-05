@@ -390,7 +390,7 @@ object Application {
 
     // DO NOT LOG BEFORE THIS LINES, THESE PROPERTIES ARE USED IN THE logback.xml
     System.setProperty("waves.directory", config.getString("waves.directory"))
-    System.setProperty("waves.config.directory", config.getString("waves.config.directory"))
+    if (config.hasPath("waves.config.directory")) System.setProperty("waves.config.directory", config.getString("waves.config.directory"))
 
     // IMPORTANT: to make use of default settings for histograms and timers, it's crucial to reconfigure Kamon with
     //            our merged config BEFORE initializing any metrics, including in settings-related companion objects
