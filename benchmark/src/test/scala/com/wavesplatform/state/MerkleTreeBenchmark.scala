@@ -7,7 +7,7 @@ import com.wavesplatform.common.utils.EitherExt2
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.Transaction
 import com.wavesplatform.transaction.transfer.TransferTransactionV1
-import com.wavesplatform.utils.MerkleVerify._
+import com.wavesplatform.utils.Merkle._
 import org.openjdk.jmh.annotations._
 import org.scalacheck.Gen
 

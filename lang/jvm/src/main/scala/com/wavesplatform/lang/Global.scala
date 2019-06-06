@@ -1,19 +1,17 @@
 package com.wavesplatform.lang
 
-import com.wavesplatform.lang.v1.evaluator.ctx.impl.crypto.RSA
-import com.wavesplatform.lang.v1.evaluator.ctx.impl.crypto.RSA.DigestAlgorithm
-import com.wavesplatform.common.utils.{Base58, Base64}
-import com.wavesplatform.lang.v1.BaseGlobal
-import scorex.crypto.hash.{Blake2b256, CryptographicHash, CryptographicHash32, Digest, Digest32, Keccak256, Sha256}
-import scorex.crypto.signatures.{Curve25519, PublicKey, Signature}
-
-import scala.util.Try
 import java.math.{MathContext, RoundingMode, BigDecimal => BD}
 
 import ch.obermuhlner.math.big.BigDecimalMath
+import com.wavesplatform.common.utils.{Base58, Base64}
+import com.wavesplatform.lang.v1.BaseGlobal
+import com.wavesplatform.lang.v1.evaluator.ctx.impl.crypto.RSA
+import com.wavesplatform.lang.v1.evaluator.ctx.impl.crypto.RSA.DigestAlgorithm
 import com.wavesplatform.utils.MerkleVerify
-import scorex.crypto.authds.{LeafData, Side}
-import scorex.crypto.authds.merkle.MerkleProof
+import scorex.crypto.hash.{Blake2b256, Keccak256, Sha256}
+import scorex.crypto.signatures.{Curve25519, PublicKey, Signature}
+
+import scala.util.Try
 
 object Global extends BaseGlobal {
   def base58Encode(input: Array[Byte]): Either[String, String] =
@@ -45,29 +43,31 @@ object Global extends BaseGlobal {
     MerkleVerify(rootBytes, proofBytes, valueBytes)
 
   // Math functions
-  def roundMode(round: BaseGlobal.Rounds) : RoundingMode = {
+  def roundMode(round: BaseGlobal.Rounds): RoundingMode = {
     round match {
-      case BaseGlobal.RoundUp() => RoundingMode.UP
-      case BaseGlobal.RoundHalfUp() => RoundingMode.HALF_UP
+      case BaseGlobal.RoundUp()       => RoundingMode.UP
+      case BaseGlobal.RoundHalfUp()   => RoundingMode.HALF_UP
       case BaseGlobal.RoundHalfDown() => RoundingMode.HALF_DOWN
-      case BaseGlobal.RoundDown() => RoundingMode.DOWN
+      case BaseGlobal.RoundDown()     => RoundingMode.DOWN
       case BaseGlobal.RoundHalfEven() => RoundingMode.HALF_EVEN
-      case BaseGlobal.RoundCeiling() => RoundingMode.CEILING
-      case BaseGlobal.RoundFloor() => RoundingMode.FLOOR
+      case BaseGlobal.RoundCeiling()  => RoundingMode.CEILING
+      case BaseGlobal.RoundFloor()    => RoundingMode.FLOOR
     }
   }
 
-  def pow(b: Long, bp: Long, e: Long, ep: Long, rp: Long, round: BaseGlobal.Rounds) : Either[String, Long] = (Try {
-        val base = BD.valueOf(b, bp.toInt)
-        val exp = BD.valueOf(e, ep.toInt)
-        val res = BigDecimalMath.pow(base, exp, MathContext.DECIMAL128)
-        res.setScale(rp.toInt, roundMode(round)).unscaledValue.longValueExact
-      }).toEither.left.map(_.toString)
+  def pow(b: Long, bp: Long, e: Long, ep: Long, rp: Long, round: BaseGlobal.Rounds): Either[String, Long] =
+    (Try {
+      val base = BD.valueOf(b, bp.toInt)
+      val exp  = BD.valueOf(e, ep.toInt)
+      val res  = BigDecimalMath.pow(base, exp, MathContext.DECIMAL128)
+      res.setScale(rp.toInt, roundMode(round)).unscaledValue.longValueExact
+    }).toEither.left.map(_.toString)
 
-  def log(b: Long, bp: Long, e: Long, ep: Long, rp: Long, round: BaseGlobal.Rounds) : Either[String, Long] = (Try {
-        val base = BD.valueOf(b, bp.toInt)
-        val exp = BD.valueOf(e, ep.toInt)
-        val res = BigDecimalMath.log(base, MathContext.DECIMAL128).divide(BigDecimalMath.log(exp, MathContext.DECIMAL128), MathContext.DECIMAL128)
-        res.setScale(rp.toInt, roundMode(round)).unscaledValue.longValueExact
-      }).toEither.left.map(_.toString)
+  def log(b: Long, bp: Long, e: Long, ep: Long, rp: Long, round: BaseGlobal.Rounds): Either[String, Long] =
+    (Try {
+      val base = BD.valueOf(b, bp.toInt)
+      val exp  = BD.valueOf(e, ep.toInt)
+      val res  = BigDecimalMath.log(base, MathContext.DECIMAL128).divide(BigDecimalMath.log(exp, MathContext.DECIMAL128), MathContext.DECIMAL128)
+      res.setScale(rp.toInt, roundMode(round)).unscaledValue.longValueExact
+    }).toEither.left.map(_.toString)
 }

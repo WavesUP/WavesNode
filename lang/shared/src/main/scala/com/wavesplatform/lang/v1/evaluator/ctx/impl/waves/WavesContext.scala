@@ -518,7 +518,6 @@ object WavesContext {
     }
 
     lazy val functions = Array(
-      txByIdF,
       txHeightByIdF,
       getIntegerFromStateF,
       getBooleanFromStateF,
@@ -566,16 +565,6 @@ object WavesContext {
 
     CTX(
       types ++ (if (version == V3 || version == V4) {
-                  List(writeSetType, paymentType, scriptTransfer, scriptTransferSetType, scriptResultType, invocationType, assetType, blockInfo)
-                } else List.empty),
-      commonVars ++ vars(version.id),
-      functions ++
-        (if (version == V3 || version == V4) v3Functions.map(withExtract) :+ assetInfoF :+ blockInfoByHeightF :+ transferTxByIdF else List.empty) ++
-        (if (version == V4) v4Functions else List.empty)
-    )
-
-    CTX(
-      types ++ (if (version == V3) {
                   List(writeSetType, paymentType, scriptTransfer, scriptTransferSetType, scriptResultType, invocationType, assetType, blockInfo)
                 } else List.empty),
       commonVars ++ vars(version.id),
