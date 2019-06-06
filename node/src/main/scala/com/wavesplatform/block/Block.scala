@@ -310,6 +310,21 @@ case class Block private[block] (override val timestamp: Long,
   override def toString: String =
     s"Block(${signerData.signature} -> ${reference.trim}, txs=${transactionData.size}, features=$featureVotes)"
 
+  def getHeader(): com.wavesplatform.lang.v1.traits.domain.BlockHeader =
+    com.wavesplatform.lang.v1.traits.domain.BlockHeader(
+      timestamp,
+      version,
+      reference,
+      signerData.generator,
+      signerData.signature,
+      consensusData.baseTarget,
+      consensusData.generationSignature,
+      transactionData.length,
+      transactionTreeHash,
+      minerWavesBalancesTreeHash,
+      minerEffectiveBalancesTreeHash,
+      featureVotes.map(_.toLong).toSeq
+    )
 }
 
 object Block extends ScorexLogging {

@@ -79,8 +79,6 @@ trait BaseGlobal {
 
   def checksum(arr: Array[Byte]): Array[Byte] = secureHash(arr).take(4)
 
-  def merkleVerify(rootBytes: Array[Byte], proofBytes: Array[Byte], valueBytes: Array[Byte]): Boolean
-
   def serializeExpression(expr: EXPR, stdLibVersion: StdLibVersion): Array[Byte] = {
     val s = Array(stdLibVersion.id.toByte) ++ Serde.serialize(expr)
     s ++ checksum(s)
@@ -118,4 +116,22 @@ trait BaseGlobal {
       scriptText
     }
   }
+
+  def merkleVerify(rootBytes: Array[Byte], proofBytes: Array[Byte], valueBytes: Array[Byte]): Boolean
+
+  // Math functions
+
+  def pow(b: Long, bp: Long, e: Long, ep: Long, rp: Long, round: BaseGlobal.Rounds) : Either[String, Long]
+  def log(b: Long, bp: Long, e: Long, ep: Long, rp: Long, round: BaseGlobal.Rounds) : Either[String, Long]
+}
+
+object BaseGlobal {
+  sealed trait Rounds
+  case class RoundDown() extends Rounds
+  case class RoundUp() extends Rounds
+  case class RoundHalfDown() extends Rounds
+  case class RoundHalfUp() extends Rounds
+  case class RoundHalfEven() extends Rounds
+  case class RoundCeiling() extends Rounds
+  case class RoundFloor() extends Rounds
 }

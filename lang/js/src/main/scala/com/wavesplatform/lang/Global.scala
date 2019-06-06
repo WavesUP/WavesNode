@@ -32,7 +32,6 @@ object Global extends BaseGlobal {
   def curve25519verify(message: Array[Byte], sig: Array[Byte], pub: Array[Byte]): Boolean =
     impl.Global.curve25519verify(toBuffer(message), toBuffer(sig), toBuffer(pub))
 
-
   override def rsaVerify(alg: DigestAlgorithm, message: Array[Byte], sig: Array[Byte], pub: Array[Byte]): Boolean =
     impl.Global.rsaVerify(alg, toBuffer(message), toBuffer(sig), toBuffer(pub))
 
@@ -40,10 +39,8 @@ object Global extends BaseGlobal {
   def blake2b256(message: Array[Byte]): Array[Byte] = hash(message)(impl.Global.blake2b256)
   def sha256(message: Array[Byte]): Array[Byte]     = hash(message)(impl.Global.sha256)
 
+  private def toArray(xs: ArrayBuffer): Array[Byte]                                  = new Int8Array(xs).toArray
   private def hash(message: Array[Byte])(f: ArrayBuffer => ArrayBuffer): Array[Byte] = toArray(f(toBuffer(message)))
-
-  override def merkleVerify(rootBytes: Array[Byte], proofBytes: Array[Byte], valueBytes: Array[Byte]): Boolean =
-    impl.Global.merkleVerify(toBuffer(rootBytes), toBuffer(proofBytes), toBuffer(valueBytes))
 
   def toBuffer(xs: Array[Byte]): ArrayBuffer = {
     val r = new Int8Array(xs.length)
@@ -51,5 +48,9 @@ object Global extends BaseGlobal {
     r.buffer
   }
 
-  private def toArray(xs: ArrayBuffer): Array[Byte] = new Int8Array(xs).toArray
+  override def merkleVerify(rootBytes: Array[Byte], proofBytes: Array[Byte], valueBytes: Array[Byte]): Boolean =
+    impl.Global.merkleVerify(toBuffer(rootBytes), toBuffer(proofBytes), toBuffer(valueBytes))
+
+  def pow(b: Long, bp: Long, e: Long, ep: Long, rp: Long, round: BaseGlobal.Rounds): Either[String, Long] = ???
+  def log(b: Long, bp: Long, e: Long, ep: Long, rp: Long, round: BaseGlobal.Rounds): Either[String, Long] = ???
 }

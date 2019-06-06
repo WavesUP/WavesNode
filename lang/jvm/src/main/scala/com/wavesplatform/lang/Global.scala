@@ -4,12 +4,14 @@ import com.wavesplatform.lang.v1.evaluator.ctx.impl.crypto.RSA
 import com.wavesplatform.lang.v1.evaluator.ctx.impl.crypto.RSA.DigestAlgorithm
 import com.wavesplatform.common.utils.{Base58, Base64}
 import com.wavesplatform.lang.v1.BaseGlobal
-import scorex.crypto.authds.merkle.MerkleProof
-import scorex.crypto.authds.{LeafData, Side}
-import scorex.crypto.hash._
+import com.wavesplatform.utils.Merkle
+import scorex.crypto.hash.{Blake2b256, Keccak256, Sha256}
 import scorex.crypto.signatures.{Curve25519, PublicKey, Signature}
 
 import scala.util.Try
+
+import java.math.{MathContext, RoundingMode, BigDecimal => BD}
+import ch.obermuhlner.math.big.BigDecimalMath
 
 object Global extends BaseGlobal {
   def base58Encode(input: Array[Byte]): Either[String, String] =
@@ -37,49 +39,33 @@ object Global extends BaseGlobal {
   def blake2b256(message: Array[Byte]): Array[Byte] = Blake2b256.hash(message)
   def sha256(message: Array[Byte]): Array[Byte]     = Sha256.hash(message)
 
-  override def merkleVerify(rootBytes: Array[Byte], proofBytes: Array[Byte], valueBytes: Array[Byte]): Boolean = {
-    (for {
-      rootDigest  <- parseRoot(rootBytes)
-      merkleProof <- parseProof(proofBytes, valueBytes)
-    } yield merkleProof.valid(rootDigest)).getOrElse(false)
+  override def merkleVerify(rootBytes: Array[Byte], proofBytes: Array[Byte], valueBytes: Array[Byte]): Boolean =
+    Merkle.verify(rootBytes, proofBytes, valueBytes)
+
+  // Math functions
+  def roundMode(round: BaseGlobal.Rounds) : RoundingMode = {
+    round match {
+      case BaseGlobal.RoundUp() => RoundingMode.UP
+      case BaseGlobal.RoundHalfUp() => RoundingMode.HALF_UP
+      case BaseGlobal.RoundHalfDown() => RoundingMode.HALF_DOWN
+      case BaseGlobal.RoundDown() => RoundingMode.DOWN
+      case BaseGlobal.RoundHalfEven() => RoundingMode.HALF_EVEN
+      case BaseGlobal.RoundCeiling() => RoundingMode.CEILING
+      case BaseGlobal.RoundFloor() => RoundingMode.FLOOR
+    }
   }
 
-  def parseRoot(bytes: Array[Byte]): Option[Digest32] = {
-    if (bytes.length == 32) Some(Digest32 @@ bytes)
-    else None
-  }
+  def pow(b: Long, bp: Long, e: Long, ep: Long, rp: Long, round: BaseGlobal.Rounds) : Either[String, Long] = (Try {
+        val base = BD.valueOf(b, bp.toInt)
+        val exp = BD.valueOf(e, ep.toInt)
+        val res = BigDecimalMath.pow(base, exp, MathContext.DECIMAL128)
+        res.setScale(rp.toInt, roundMode(round)).unscaledValue.longValueExact
+      }).toEither.left.map(_.toString)
 
-  private def parseProof(proofBytes: Array[Byte], valueBytes: Array[Byte]): Option[MerkleProof[Digest32]] =
-    Try {
-      MerkleProof[Digest32](
-        LeafData @@ valueBytes,
-        parseMerkleProofLevels(proofBytes)
-      )(blakeCH)
-    }.toOption
-
-  def parseMerkleProofLevels(arr: Array[Byte]): List[(Digest, Side)] = {
-    def parseHashAndSide(arr: Array[Byte]): (Side, Digest, Array[Byte]) = {
-      val side =
-        if (arr(0) == MerkleProof.LeftSide) MerkleProof.LeftSide
-        else MerkleProof.RightSide
-      val hashLen = arr(1).toInt
-      val hash    = Digest32 @@ arr.slice(2, 2 + hashLen)
-      (side, hash, arr.drop(2 + hashLen))
-    }
-
-    def parseLevels(arr: Array[Byte], acc: List[(Digest, Side)]): List[(Digest, Side)] = {
-      if (arr.nonEmpty) {
-        val (side, hash, rest) = parseHashAndSide(arr)
-        parseLevels(rest, (hash, side) :: acc)
-      } else acc.reverse
-    }
-
-    parseLevels(arr, Nil)
-  }
-
-  private val blakeCH: CryptographicHash[Digest32] =
-    new CryptographicHash32 {
-      override def hash(input: Message): Digest32 = Digest32 @@ blake2b256(input)
-    }
-
+  def log(b: Long, bp: Long, e: Long, ep: Long, rp: Long, round: BaseGlobal.Rounds) : Either[String, Long] = (Try {
+        val base = BD.valueOf(b, bp.toInt)
+        val exp = BD.valueOf(e, ep.toInt)
+        val res = BigDecimalMath.log(base, MathContext.DECIMAL128).divide(BigDecimalMath.log(exp, MathContext.DECIMAL128), MathContext.DECIMAL128)
+        res.setScale(rp.toInt, roundMode(round)).unscaledValue.longValueExact
+      }).toEither.left.map(_.toString)
 }
