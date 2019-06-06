@@ -295,9 +295,9 @@ object WavesContext {
           ))
     }
 
-    val heightCoeval:    Eval[Either[String, CONST_LONG]] = Eval.later(Right(CONST_LONG(env.height)))
-    val thisCoeval:      Eval[Either[String, CaseObj]]    = Eval.later(Right(Bindings.senderObject(env.tthis)))
-    val lastBlockCoeval: Eval[Either[String, CaseObj]]    = Eval.later(Right(Bindings.buildLastBlockInfo(env.lastBlockOpt().get)))
+    val heightCoeval: Eval[Either[String, CONST_LONG]] = Eval.later(Right(CONST_LONG(env.height)))
+    val thisCoeval: Eval[Either[String, CaseObj]]      = Eval.later(Right(Bindings.senderObject(env.tthis)))
+    val lastBlockCoeval: Eval[Either[String, CaseObj]] = Eval.later(Right(Bindings.buildLastBlockInfo(env.lastBlockOpt().get)))
 
     val anyTransactionType =
       UNION(
@@ -306,12 +306,7 @@ object WavesContext {
 
     val txByIdF: BaseFunction = {
       val returnType = com.wavesplatform.lang.v1.compiler.Types.UNION.create(UNIT +: anyTransactionType.typeList)
-      NativeFunction("transactionById",
-                     100,
-                     GETTRANSACTIONBYID,
-                     returnType,
-                     "Lookup transaction",
-                     ("id", BYTESTR, "transaction Id")) {
+      NativeFunction("transactionById", 100, GETTRANSACTIONBYID, returnType, "Lookup transaction", ("id", BYTESTR, "transaction Id")) {
         case CONST_BYTESTR(id: ByteStr) :: Nil =>
           val maybeDomainTx: Option[CaseObj] = env.transactionById(id.arr).map(transactionObject(_, proofsEnabled, version))
           Right(fromOptionCO(maybeDomainTx))
@@ -405,8 +400,8 @@ object WavesContext {
       case _                               => ???
     }
 
-    val sellOrdTypeCoeval: Eval[Either[String, CaseObj]]  = Eval.always(Right(ordType(OrdType.Sell)))
-    val buyOrdTypeCoeval:  Eval[Either[String, CaseObj]]  = Eval.always(Right(ordType(OrdType.Buy)))
+    val sellOrdTypeCoeval: Eval[Either[String, CaseObj]] = Eval.always(Right(ordType(OrdType.Sell)))
+    val buyOrdTypeCoeval: Eval[Either[String, CaseObj]]  = Eval.always(Right(ordType(OrdType.Buy)))
 
     val scriptInputType =
       if (isTokenContext)
@@ -445,28 +440,6 @@ object WavesContext {
         val v3Part2: Map[String, ((FINAL, String), LazyVal)] = if (ds.contentType == Expression) Map(txVar, thisVar) else Map(thisVar)
         (v3Part1 ++ v3Part2)
       }
-    )
-
-    lazy val functions = Array(
-      txByIdF,
-      txHeightByIdF,
-      getIntegerFromStateF,
-      getBooleanFromStateF,
-      getBinaryFromStateF,
-      getStringFromStateF,
-      getIntegerFromArrayF,
-      getBooleanFromArrayF,
-      getBinaryFromArrayF,
-      getStringFromArrayF,
-      getIntegerByIndexF,
-      getBooleanByIndexF,
-      getBinaryByIndexF,
-      getStringByIndexF,
-      addressFromPublicKeyF,
-      addressFromStringF,
-      addressFromRecipientF,
-      assetBalanceF,
-      wavesBalanceF
     )
 
     val blockHeaderFromBytesF: BaseFunction =
@@ -544,6 +517,28 @@ object WavesContext {
       }
     }
 
+    lazy val functions = Array(
+      txByIdF,
+      txHeightByIdF,
+      getIntegerFromStateF,
+      getBooleanFromStateF,
+      getBinaryFromStateF,
+      getStringFromStateF,
+      getIntegerFromArrayF,
+      getBooleanFromArrayF,
+      getBinaryFromArrayF,
+      getStringFromArrayF,
+      getIntegerByIndexF,
+      getBooleanByIndexF,
+      getBinaryByIndexF,
+      getStringByIndexF,
+      addressFromPublicKeyF,
+      addressFromStringF,
+      addressFromRecipientF,
+      assetBalanceF,
+      wavesBalanceF
+    )
+
     val v3Functions = List(
       getIntegerFromStateF,
       getBooleanFromStateF,
@@ -558,7 +553,7 @@ object WavesContext {
       getBinaryByIndexF,
       getStringByIndexF,
       addressFromStringF
-    )
+    ).map(withExtract) ::: List(assetInfoF, blockInfoByHeightF, transferTxByIdF)
 
     val v4Functions = List(
       blockHeaderFromBytesF,
@@ -577,6 +572,18 @@ object WavesContext {
       functions ++
         (if (version == V3 || version == V4) v3Functions.map(withExtract) :+ assetInfoF :+ blockInfoByHeightF :+ transferTxByIdF else List.empty) ++
         (if (version == V4) v4Functions else List.empty)
+    )
+
+    CTX(
+      types ++ (if (version == V3) {
+                  List(writeSetType, paymentType, scriptTransfer, scriptTransferSetType, scriptResultType, invocationType, assetType, blockInfo)
+                } else List.empty),
+      commonVars ++ vars(version.id),
+      functions ++ (version match {
+        case V1 | V2 => List(txByIdF)
+        case V3      => v3Functions
+        case V4      => v3Functions ::: v4Functions
+      })
     )
   }
 

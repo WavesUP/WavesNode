@@ -4,14 +4,16 @@ import com.wavesplatform.lang.v1.evaluator.ctx.impl.crypto.RSA
 import com.wavesplatform.lang.v1.evaluator.ctx.impl.crypto.RSA.DigestAlgorithm
 import com.wavesplatform.common.utils.{Base58, Base64}
 import com.wavesplatform.lang.v1.BaseGlobal
-import com.wavesplatform.utils.Merkle
-import scorex.crypto.hash.{Blake2b256, Keccak256, Sha256}
+import scorex.crypto.hash.{Blake2b256, CryptographicHash, CryptographicHash32, Digest, Digest32, Keccak256, Sha256}
 import scorex.crypto.signatures.{Curve25519, PublicKey, Signature}
 
 import scala.util.Try
-
 import java.math.{MathContext, RoundingMode, BigDecimal => BD}
+
 import ch.obermuhlner.math.big.BigDecimalMath
+import com.wavesplatform.utils.MerkleVerify
+import scorex.crypto.authds.{LeafData, Side}
+import scorex.crypto.authds.merkle.MerkleProof
 
 object Global extends BaseGlobal {
   def base58Encode(input: Array[Byte]): Either[String, String] =
@@ -40,7 +42,7 @@ object Global extends BaseGlobal {
   def sha256(message: Array[Byte]): Array[Byte]     = Sha256.hash(message)
 
   override def merkleVerify(rootBytes: Array[Byte], proofBytes: Array[Byte], valueBytes: Array[Byte]): Boolean =
-    Merkle.verify(rootBytes, proofBytes, valueBytes)
+    MerkleVerify(rootBytes, proofBytes, valueBytes)
 
   // Math functions
   def roundMode(round: BaseGlobal.Rounds) : RoundingMode = {
