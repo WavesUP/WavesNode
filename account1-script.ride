@@ -1,0 +1,9 @@
+{-# STDLIB_VERSION 3 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+@Callable(i)
+func dosReturnPayment() = {
+    let pay = extract(i.payment)
+    TransferSet([ScriptTransfer(i.caller, pay.amount, pay.assetId)])
+}

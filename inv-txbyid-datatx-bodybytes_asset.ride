@@ -1,0 +1,46 @@
+{-# STDLIB_VERSION 2 #-}
+{-# CONTENT_TYPE EXPRESSION #-}
+{-# SCRIPT_TYPE ASSET #-}
+
+let dataTxId = base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'
+
+match transactionById(dataTxId) { case t1: DataTransaction =>
+match transactionById(dataTxId) { case t2: DataTransaction =>
+match transactionById(dataTxId) { case t3: DataTransaction =>
+match transactionById(dataTxId) { case t4: DataTransaction =>
+match transactionById(dataTxId) { case t5: DataTransaction =>
+match transactionById(dataTxId) { case t6: DataTransaction =>
+match transactionById(dataTxId) { case t7: DataTransaction =>
+match transactionById(dataTxId) { case t8: DataTransaction =>
+match transactionById(dataTxId) { case t9: DataTransaction =>
+match transactionById(dataTxId) { case t10: DataTransaction =>
+match transactionById(dataTxId) { case t11: DataTransaction =>
+match transactionById(dataTxId) { case t12: DataTransaction =>
+match transactionById(dataTxId) { case t13: DataTransaction =>
+match transactionById(dataTxId) { case t14: DataTransaction =>
+match transactionById(dataTxId) { case t15: DataTransaction =>
+match transactionById(dataTxId) { case t16: DataTransaction =>
+    t1.bodyBytes == t2.bodyBytes
+    && t3.bodyBytes == t4.bodyBytes
+    && t5.bodyBytes == t6.bodyBytes
+    && t7.bodyBytes == t8.bodyBytes
+    && t9.bodyBytes == t10.bodyBytes
+    && t11.bodyBytes == t12.bodyBytes
+    && t13.bodyBytes == t14.bodyBytes
+    && t15.bodyBytes == t16.bodyBytes
+case _ => true }
+case _ => true }
+case _ => true }
+case _ => true }
+case _ => true }
+case _ => true }
+case _ => true }
+case _ => true }
+case _ => true }
+case _ => true }
+case _ => true }
+case _ => true }
+case _ => true }
+case _ => true }
+case _ => true }
+case _ => true }
