@@ -10,6 +10,7 @@ import com.wavesplatform.protobuf.block.{PBBlock, PBBlocks, VanillaBlock}
 import com.wavesplatform.protobuf.transaction._
 import com.wavesplatform.transaction.Proofs
 import com.wavesplatform.{block => vb}
+import scorex.crypto.hash.Digest32
 
 //noinspection ScalaStyle
 trait PBImplicitConversions {
@@ -50,6 +51,9 @@ trait PBImplicitConversions {
         vb.SignerData(header.generator.toPublicKeyAccount, signature),
         NxtLikeConsensusBlockData(header.baseTarget, header.generationSignature.toByteStr),
         0,
+        Digest32 @@ header.transactionTreeHash.toByteArray,
+        Digest32 @@ header.minerBalancesTreeHash.toByteArray,
+        Digest32 @@ header.minerEffectiveBalancesTreeHash.toByteArray,
         header.featureVotes.map(intToShort).toSet
       )
     }
