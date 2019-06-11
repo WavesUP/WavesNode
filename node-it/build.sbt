@@ -7,7 +7,7 @@ libraryDependencies ++= Dependencies.itTest
 
 inTask(docker)(
   Seq(
-    imageNames := Seq(ImageName("com.wavesplatform/node-it")),
+    imageNames := Seq(ImageName("com.wavesup/node-it")),
     exposedPorts := Set(6863, 6869), // NetworkApi, RestApi
     additionalFiles ++= (LocalProject("node") / Universal / stage).value +: Seq(
       (Test / resourceDirectory).value / "template.conf",

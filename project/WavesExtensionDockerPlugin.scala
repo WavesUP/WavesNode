@@ -12,7 +12,7 @@ object WavesExtensionDockerPlugin extends AutoPlugin {
       Seq(
         additionalFiles := Seq.empty,
         exposedPorts := Set.empty,
-        baseImage := "com.wavesplatform/node-it:latest",
+        baseImage := "com.wavesup/node-it:latest",
         dockerfile := {
           new Dockerfile {
             from(baseImage.value)
