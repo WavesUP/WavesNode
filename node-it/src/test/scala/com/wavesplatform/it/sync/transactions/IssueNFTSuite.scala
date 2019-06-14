@@ -62,104 +62,61 @@ class IssueNFTSuite extends BaseTransactionSuite with TableDrivenPropertyChecks 
     val assetName        = "NFTAsset"
     val assetDescription = "my asset description"
 
-    val ttx = TransferTransactionV1
-      .selfSigned(
-        Waves,
-        secondNode.privateKey,
-        secondNodeIssuer,
-        10.waves,
-        System.currentTimeMillis(),
-        Waves,
-        0.001.waves,
-        Array.emptyByteArray
-      )
-      .explicitGet()
+    val nftIssueTxId = secondNode.issue(secondNode.address,
+                                         assetName,
+                                         assetDescription,
+                                         quantity = 1,
+                                         decimals = 0,
+                                         reissuable = false,
+                                         fee = 0.001.waves,
+                                         script = None,
+                                         waitForTx = true).id
 
-    secondNode.signedBroadcast(ttx.json(), waitForTx = true)
-
-    val itx = IssueTransactionV2
-      .selfSigned(
-        'I',
-        secondNodeIssuer,
-        assetName.getBytes(),
-        assetDescription.getBytes(),
-        1,
-        0,
-        false,
-        None,
-        0.001.waves,
-        System.currentTimeMillis()
-      )
-      .explicitGet()
-
-    secondNode.signedBroadcast(itx.json(), waitForTx = true)
-
-    secondNode.assertAssetBalance(secondNodeIssuer.address, itx.assetId().toString, 1L)
+    secondNode.assertAssetBalance(secondNode.address, nftIssueTxId, 1L)
   }
 
   test("Can't issue reissuable NFT") {
     val assetName        = "NFTAsset"
     val assetDescription = "my asset description"
 
-    val itx = IssueTransactionV2
-      .selfSigned(
-        'I',
-        secondNodeIssuer,
-        assetName.getBytes(),
-        assetDescription.getBytes(),
-        1,
-        0,
-        true,
-        None,
-        0.001.waves,
-        System.currentTimeMillis()
-      )
-      .explicitGet()
-
-    assertBadRequestAndResponse(secondNode.signedBroadcast(itx.json(), waitForTx = true), "does not exceed minimal value")
+    assertBadRequestAndResponse(secondNode.issue(secondNode.address,
+      assetName,
+      assetDescription,
+      quantity = 1,
+      decimals = 0,
+      reissuable = true,
+      fee = 0.001.waves,
+      script = None,
+      waitForTx = true), "does not exceed minimal value")
   }
 
   test("Can't issue NFT with quantity > 1") {
     val assetName        = "NFTAsset"
     val assetDescription = "my asset description"
 
-    val itx = IssueTransactionV2
-      .selfSigned(
-        'I',
-        secondNodeIssuer,
-        assetName.getBytes(),
-        assetDescription.getBytes(),
-        2,
-        0,
-        true,
-        None,
-        0.001.waves,
-        System.currentTimeMillis()
-      )
-      .explicitGet()
-
-    assertBadRequestAndResponse(secondNode.signedBroadcast(itx.json(), waitForTx = true), "does not exceed minimal value")
+    assertBadRequestAndResponse(secondNode.issue(secondNode.address,
+      assetName,
+      assetDescription,
+      quantity = 2,
+      decimals = 0,
+      reissuable = false,
+      fee = 0.001.waves,
+      script = None,
+      waitForTx = true), "does not exceed minimal value")
   }
 
   test("Can't issue token with reduced fee if decimals > 0") {
     val assetName        = "NFTAsset"
     val assetDescription = "my asset description"
 
-    val itx = IssueTransactionV2
-      .selfSigned(
-        'I',
-        secondNodeIssuer,
-        assetName.getBytes(),
-        assetDescription.getBytes(),
-        1,
-        1,
-        true,
-        None,
-        0.001.waves,
-        System.currentTimeMillis()
-      )
-      .explicitGet()
-
-    assertBadRequestAndResponse(secondNode.signedBroadcast(itx.json(), waitForTx = true), "does not exceed minimal value")
+    assertBadRequestAndResponse(secondNode.issue(secondNode.address,
+      assetName,
+      assetDescription,
+      quantity = 1,
+      decimals = 1,
+      reissuable = false,
+      fee = 0.001.waves,
+      script = None,
+      waitForTx = true), "does not exceed minimal value")
   }
 }
