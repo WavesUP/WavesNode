@@ -15,16 +15,16 @@ import com.wavesplatform.transaction.transfer._
 
 object RealTransactionWrapper {
 
-  private def header(tx: Transaction): Header = {
+  private def header(tx: Transaction, id: Option[ByteStr] = None): Header = {
     val v = tx match {
       case vt: VersionedTransaction => vt.version
       case _                        => 1
     }
-    Header(ByteStr(tx.id().arr), tx.assetFee._2, tx.timestamp, v)
+    Header(id.getOrElse(ByteStr(tx.id().arr)), tx.assetFee._2, tx.timestamp, v)
   }
-  private def proven(tx: ProvenTransaction): Proven =
+  private def proven(tx: ProvenTransaction, id: Option[ByteStr] = None): Proven =
     Proven(
-      header(tx),
+      header(tx, id),
       Recipient.Address(ByteStr(tx.sender.bytes.arr)),
       ByteStr(tx.bodyBytes()),
       ByteStr(tx.sender),
@@ -58,7 +58,7 @@ object RealTransactionWrapper {
     case a: Alias   => Recipient.Alias(a.name)
   }
 
-  def apply(tx: Transaction): Tx = {
+  def apply(tx: Transaction, id: Option[ByteStr] = None): Tx = {
     tx match {
       case g: GenesisTransaction  => Tx.Genesis(header(g), g.amount, g.recipient)
       case t: TransferTransaction => mapTransferTx(t)
@@ -85,12 +85,12 @@ object RealTransactionWrapper {
       case s: SponsorFeeTransaction      => Tx.Sponsorship(proven(s), s.asset.id, s.minSponsoredAssetFee)
       case d: DataTransaction =>
         Tx.Data(
-          proven(d),
+          proven(d, id),
           d.data.map {
-            case IntegerDataEntry(key, value) => DataItem.Lng(key, value)
-            case StringDataEntry(key, value)  => DataItem.Str(key, value)
-            case BooleanDataEntry(key, value) => DataItem.Bool(key, value)
-            case BinaryDataEntry(key, value)  => DataItem.Bin(key, value)
+            case IntegerDataEntry(key, value, _) => DataItem.Lng(key, value)
+            case StringDataEntry(key, value, _)  => DataItem.Str(key, value)
+            case BooleanDataEntry(key, value, _) => DataItem.Bool(key, value)
+            case BinaryDataEntry(key, value, _)  => DataItem.Bin(key, value)
           }.toIndexedSeq
         )
       case ci: InvokeScriptTransaction =>

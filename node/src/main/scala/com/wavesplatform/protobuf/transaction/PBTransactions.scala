@@ -690,10 +690,10 @@ object PBTransactions {
     DataTransactionData.DataEntry(
       de.key,
       de match {
-        case IntegerDataEntry(_, value) => DataTransactionData.DataEntry.Value.IntValue(value)
-        case BooleanDataEntry(_, value) => DataTransactionData.DataEntry.Value.BoolValue(value)
-        case BinaryDataEntry(_, value)  => DataTransactionData.DataEntry.Value.BinaryValue(value)
-        case StringDataEntry(_, value)  => DataTransactionData.DataEntry.Value.StringValue(value)
+        case IntegerDataEntry(_, value, _) => DataTransactionData.DataEntry.Value.IntValue(value)
+        case BooleanDataEntry(_, value, _) => DataTransactionData.DataEntry.Value.BoolValue(value)
+        case BinaryDataEntry(_, value, _)  => DataTransactionData.DataEntry.Value.BinaryValue(value)
+        case StringDataEntry(_, value, _)  => DataTransactionData.DataEntry.Value.StringValue(value)
       }
     )
   }

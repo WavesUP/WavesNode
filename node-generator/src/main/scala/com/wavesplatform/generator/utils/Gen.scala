@@ -48,10 +48,10 @@ object Gen {
   def oracleScript(oracle: KeyPair, data: Set[DataEntry[_]]): Script = {
     val conditions =
       data.map {
-        case IntegerDataEntry(key, value) => s"""(extract(getInteger(oracle, "$key")) == $value)"""
-        case BooleanDataEntry(key, _)     => s"""extract(getBoolean(oracle, "$key"))"""
-        case BinaryDataEntry(key, value)  => s"""(extract(getBinary(oracle, "$key")) == $value)"""
-        case StringDataEntry(key, value)  => s"""(extract(getString(oracle, "$key")) == "$value")"""
+        case IntegerDataEntry(key, value, _) => s"""(extract(getInteger(oracle, "$key")) == $value)"""
+        case BooleanDataEntry(key, _, _)     => s"""extract(getBoolean(oracle, "$key"))"""
+        case BinaryDataEntry(key, value, _)  => s"""(extract(getBinary(oracle, "$key")) == $value)"""
+        case StringDataEntry(key, value, _)  => s"""(extract(getString(oracle, "$key")) == "$value")"""
       } reduce [String] { case (l, r) => s"$l && $r " }
 
     val src =

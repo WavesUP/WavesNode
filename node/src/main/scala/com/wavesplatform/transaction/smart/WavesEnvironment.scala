@@ -33,7 +33,7 @@ class WavesEnvironment(nByte: Byte, in: Coeval[WavesEnvironment.In], h: Coeval[I
     blockchain
       .transactionInfo(ByteStr(id))
       .map(_._2)
-      .map(RealTransactionWrapper(_))
+      .map(tx => RealTransactionWrapper(tx, Some(id)))
 
   override def transferTransactionById(id: Array[Byte]): Option[Tx] =
     blockchain
@@ -59,10 +59,10 @@ class WavesEnvironment(nByte: Byte, in: Coeval[WavesEnvironment.In], h: Coeval[I
         .accountData(address, key)
         .map((_, dataType))
         .flatMap {
-          case (IntegerDataEntry(_, value), DataType.Long)     => Some(value)
-          case (BooleanDataEntry(_, value), DataType.Boolean)  => Some(value)
-          case (BinaryDataEntry(_, value), DataType.ByteArray) => Some(ByteStr(value.arr))
-          case (StringDataEntry(_, value), DataType.String)    => Some(value)
+          case (IntegerDataEntry(_, value, _), DataType.Long)     => Some(value)
+          case (BooleanDataEntry(_, value, _), DataType.Boolean)  => Some(value)
+          case (BinaryDataEntry(_, value, _), DataType.ByteArray) => Some(ByteStr(value.arr))
+          case (StringDataEntry(_, value, _), DataType.String)    => Some(value)
           case _                                               => None
         }
     } yield data

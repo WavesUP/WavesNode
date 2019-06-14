@@ -5,7 +5,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import io.swagger.annotations.ApiModelProperty
 
 import scala.annotation.meta.field
-import com.google.common.primitives.{Longs, Shorts}
+import com.google.common.primitives.{Bytes, Longs, Shorts}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.state.DataEntry._
 import play.api.libs.json._
@@ -15,12 +15,15 @@ sealed abstract class DataEntry[T](
     @(ApiModelProperty @field)(required = true, dataType = "java.lang.String", value = "integer", allowableValues = "integer,boolean,binary,string")
     val `type`: String,
     val key: String,
-    val value: T) {
+    val value: T,
+    val bytesOpt: Option[Array[Byte]] = None) {
   def valueBytes: Array[Byte]
 
   def toBytes: Array[Byte] = {
-    val keyBytes = key.getBytes(UTF_8)
-    Array.concat(Shorts.toByteArray(keyBytes.length.toShort), keyBytes, valueBytes)
+    bytesOpt.getOrElse{
+      val keyBytes = key.getBytes(UTF_8)
+      Bytes.concat(Shorts.toByteArray(keyBytes.length.toShort), keyBytes, valueBytes)
+    }
   }
 
   def toJson: JsObject = Json.obj("key" -> key, "type" -> `type`)
@@ -46,15 +49,15 @@ object DataEntry {
 
   def parseValue(key: String, bytes: Array[Byte], p: Int): (DataEntry[_], Int) = {
     bytes(p) match {
-      case t if t == Type.Integer.id => (IntegerDataEntry(key, Longs.fromByteArray(bytes.drop(p + 1))), p + 9)
-      case t if t == Type.Boolean.id => (BooleanDataEntry(key, bytes(p + 1) != 0), p + 2)
+      case t if t == Type.Integer.id => (IntegerDataEntry(key, Longs.fromByteArray(bytes.drop(p + 1)), Some(bytes)), p + 9)
+      case t if t == Type.Boolean.id => (BooleanDataEntry(key, bytes(p + 1) != 0, Some(bytes)), p + 2)
       case t if t == Type.Binary.id =>
         val (blob, p1) = Deser.parseArrayWithLength(bytes, p + 1)
-        (BinaryDataEntry(key, ByteStr(blob)), p1)
+        (BinaryDataEntry(key, ByteStr(blob), Some(bytes)), p1)
 
       case t if t == Type.String.id =>
         val (blob, p1) = Deser.parseArrayWithLength(bytes, p + 1)
-        (StringDataEntry(key, new String(blob, UTF_8)), p1)
+        (StringDataEntry(key, new String(blob, UTF_8), Some(bytes)), p1)
       case t => throw new Exception(s"Unknown type $t")
     }
   }
@@ -66,23 +69,23 @@ object DataEntry {
           jsv \ "type" match {
             case JsDefined(JsString("integer")) =>
               jsv \ "value" match {
-                case JsDefined(JsNumber(n)) => JsSuccess(IntegerDataEntry(key, n.toLong))
+                case JsDefined(JsNumber(n)) => JsSuccess(IntegerDataEntry(key, n.toLong, None))
                 case _                      => JsError("value is missing or not an integer")
               }
             case JsDefined(JsString("boolean")) =>
               jsv \ "value" match {
-                case JsDefined(JsBoolean(b)) => JsSuccess(BooleanDataEntry(key, b))
+                case JsDefined(JsBoolean(b)) => JsSuccess(BooleanDataEntry(key, b, None))
                 case _                       => JsError("value is missing or not a boolean value")
               }
             case JsDefined(JsString("binary")) =>
               jsv \ "value" match {
                 case JsDefined(JsString(enc)) =>
-                  ByteStr.decodeBase64(enc).fold(ex => JsError(ex.getMessage), bstr => JsSuccess(BinaryDataEntry(key, bstr)))
+                  ByteStr.decodeBase64(enc).fold(ex => JsError(ex.getMessage), bstr => JsSuccess(BinaryDataEntry(key, bstr, None)))
                 case _ => JsError("value is missing or not a string")
               }
             case JsDefined(JsString("string")) =>
               jsv \ "value" match {
-                case JsDefined(JsString(str)) => JsSuccess(StringDataEntry(key, str))
+                case JsDefined(JsString(str)) => JsSuccess(StringDataEntry(key, str, None))
                 case _                        => JsError("value is missing or not a string")
               }
             case JsDefined(JsString(t)) => JsError(s"unknown type $t")
@@ -96,19 +99,22 @@ object DataEntry {
   }
 }
 
-case class IntegerDataEntry(override val key: String, override val value: Long) extends DataEntry[Long]("integer", key, value) {
+case class IntegerDataEntry(override val key: String, override val value: Long, override val bytesOpt: Option[Array[Byte]] = None)
+    extends DataEntry[Long]("integer", key, value) {
   override def valueBytes: Array[Byte] = Type.Integer.id.toByte +: Longs.toByteArray(value)
 
   override def toJson: JsObject = super.toJson + ("value" -> JsNumber(value))
 }
 
-case class BooleanDataEntry(override val key: String, override val value: Boolean) extends DataEntry[Boolean]("boolean", key, value) {
+case class BooleanDataEntry(override val key: String, override val value: Boolean, override val bytesOpt: Option[Array[Byte]] = None)
+    extends DataEntry[Boolean]("boolean", key, value) {
   override def valueBytes: Array[Byte] = Array(Type.Boolean.id, if (value) 1 else 0).map(_.toByte)
 
   override def toJson: JsObject = super.toJson + ("value" -> JsBoolean(value))
 }
 
-case class BinaryDataEntry(override val key: String, override val value: ByteStr) extends DataEntry[ByteStr]("binary", key, value) {
+case class BinaryDataEntry(override val key: String, override val value: ByteStr, override val bytesOpt: Option[Array[Byte]] = None)
+    extends DataEntry[ByteStr]("binary", key, value) {
   override def valueBytes: Array[Byte] = Type.Binary.id.toByte +: Deser.serializeArray(value.arr)
 
   override def toJson: JsObject = super.toJson + ("value" -> JsString(value.base64))
@@ -116,7 +122,8 @@ case class BinaryDataEntry(override val key: String, override val value: ByteStr
   override def valid: Boolean = super.valid && value.arr.length <= MaxValueSize
 }
 
-case class StringDataEntry(override val key: String, override val value: String) extends DataEntry[String]("string", key, value) {
+case class StringDataEntry(override val key: String, override val value: String, override val bytesOpt: Option[Array[Byte]] = None)
+    extends DataEntry[String]("string", key, value) {
   override def valueBytes: Array[Byte] = Type.String.id.toByte +: Deser.serializeArray(value.getBytes(UTF_8))
 
   override def toJson: JsObject = super.toJson + ("value" -> JsString(value))
