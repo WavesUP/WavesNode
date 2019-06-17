@@ -75,7 +75,7 @@ class DataTransactionSpecification extends PropSpec with PropertyChecks with Mat
       req.data zip tx.data foreach {
         case (re, te) =>
           re match {
-            case BinaryDataEntry(k, v) =>
+            case BinaryDataEntry(k, v, _) =>
               k shouldEqual te.key
               v shouldEqual te.value
             case _: DataEntry[_] =>
