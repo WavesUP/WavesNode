@@ -1,0 +1,21 @@
+{-# STDLIB_VERSION 3 #-}
+{-# CONTENT_TYPE EXPRESSION #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+let val = Address(base58'3FVmtLiQePB6kLa1z3uWDSirjmxe1Md2pPg').getBinaryValue("1")
+let source = val # + val
+
+let proof = base64'ZsHwKh6vKe0+mR8wGlkmyN6aShYBbRK1L+R8vgOs9R7Tsrcb89j+LMb8RF3y7XnStkdVh3eXoviLOocMiYypAMq5Pn9Fh9f88fd71VU8m0U16kwPDosuTthRFxe+C6B3XA0SZp+8D6H3R72QMVdJ0nhpJn5KUfJIGANHsIU4N2faWKBhGFjumJrq3CvVdlzymwDL55LkppC0/n9lAuMsbQ9FTfiucSR/Qc+QkoUfiV5hA4Fxz3nTck+AfEcqtjQ7zaQ+4DlzKf9kljRMrta2FXGYtrH04zJFYlSHvZOu8496pdh9ZZrqACjATmBhqNuoCxH3TdCN6z321/DC1+ZTdA=='
+let pubKey = base64'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAljv5leTHVWozEFScd+3V6HpYc2OZouaYMAHMnHhpvytoeGa3QAtqldokcpD/BDyY8dKQyl2AspTjBvZU1NR/zHLFLSvQspZMbOrkxIP5lQX0efGmhOj5Vwdjdk7G01TlxXv+eiFNF4ZLQrBig8N8R2qLqETS6a8C9EZC4yzm7MDxJStMWMnyUADWQ1JaF7UxGrhLaip7SEfU5pJcIIiyrMGj1d8pYa5rpssgedmT76lkCGDT/vHLnqVs8NggbPfL2Als7/b5Fhe57rU1YLork75ugxwO7f/iQhvEHsi1VJp7VD1OqanKLM+5Ri1hh+bFgP90rNigV7LAXUM5F9Q6+QIDAQAB'
+
+rsaVerify(SHA3512, source, proof, pubKey)
+&& rsaVerify(SHA3512, source, proof, pubKey)
+&& rsaVerify(SHA3512, source, proof, pubKey)
+&& rsaVerify(SHA3512, source, proof, pubKey)
+&& rsaVerify(SHA3512, source, proof, pubKey)
+&& rsaVerify(SHA3512, source, proof, pubKey)
+&& rsaVerify(SHA3512, source, proof, pubKey)
+&& rsaVerify(SHA3512, source, proof, pubKey)
+&& rsaVerify(SHA3512, source, proof, pubKey)
+&& rsaVerify(SHA3512, source, proof, pubKey)
+&& rsaVerify(SHA3512, source, proof, pubKey)

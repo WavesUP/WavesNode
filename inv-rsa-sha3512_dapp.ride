@@ -1,0 +1,39 @@
+{-# STDLIB_VERSION 3 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+@Callable(inv)
+func perf(proof: ByteVector, pubKey: ByteVector) = {
+    let asset = base58'HwXYsaCnPcEyGR3iar9oG54fXHFggjzm2KMNdWkmznup'
+    let val = this.getBinaryValue("1")
+    let source = val # + val
+
+    ScriptResult(
+        WriteSet([DataEntry("result",
+            rsaVerify(SHA3512, source, proof, pubKey)
+            && rsaVerify(SHA3512, source, proof, pubKey)
+            && rsaVerify(SHA3512, source, proof, pubKey)
+            && rsaVerify(SHA3512, source, proof, pubKey)
+            && rsaVerify(SHA3512, source, proof, pubKey)
+            && rsaVerify(SHA3512, source, proof, pubKey)
+            && rsaVerify(SHA3512, source, proof, pubKey)
+            && rsaVerify(SHA3512, source, proof, pubKey)
+            && rsaVerify(SHA3512, source, proof, pubKey)
+            && rsaVerify(SHA3512, source, proof, pubKey)
+            && rsaVerify(SHA3512, source, proof, pubKey)
+            && rsaVerify(SHA3512, source, proof, pubKey)
+        )]),
+        TransferSet([
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset)
+        ])
+    )
+}

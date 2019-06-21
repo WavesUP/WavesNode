@@ -5,7 +5,7 @@ import java.util.concurrent.ThreadLocalRandom
 import cats.Show
 import com.wavesplatform.account.{AddressScheme, Alias, KeyPair}
 import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.common.utils.{Base58, EitherExt2}
+import com.wavesplatform.common.utils.{Base58, Base64, EitherExt2}
 import com.wavesplatform.generator.NarrowTransactionGenerator.{ScriptSettings, Settings}
 import com.wavesplatform.generator.utils.Universe
 import com.wavesplatform.lang.ValidationError
@@ -253,7 +253,7 @@ class NarrowTransactionGenerator(settings: Settings, val accounts: Seq[KeyPair])
                 case "integer" => Terms.CONST_LONG(value.toLong)
                 case "string"  => Terms.CONST_STRING(value.toString).explicitGet()
                 case "boolean" => Terms.CONST_BOOLEAN(value.toBoolean)
-                case "binary"  => Terms.CONST_BYTESTR(Base58.decode(value)).explicitGet()
+                case "binary"  => Terms.CONST_BYTESTR(Base64.decode(value)).explicitGet()
               }
 
             val maybeFunctionCall =

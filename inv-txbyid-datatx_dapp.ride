@@ -1,0 +1,24 @@
+{-# STDLIB_VERSION 3 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+#
+# broadcast(invokeScript({dApp: address(env.accounts[]), call: {function: "perf", args: []}, fee: 900000}))
+
+@Callable(inv)
+func perf() = {
+    let asset = base58'7t5MXzfjiSDkQQ71XXxLp5kcgxGkK5DhbQUq8d28dw78'
+
+    TransferSet([
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset)
+    ])
+}

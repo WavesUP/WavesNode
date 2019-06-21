@@ -1,0 +1,47 @@
+{-# STDLIB_VERSION 3 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+#
+# broadcast(invokeScript({dApp: address(env.accounts[]), call: {function: "perf", args: []}, fee: 900000}))
+
+@Callable(inv)
+func perf() = {
+    let asset = base58'F7kcgbsHWMFToXNw5bu6xJabe9GWTDgaBD15mEpM3coz'
+    let txId = base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj'
+
+    ScriptResult(
+        WriteSet([
+            DataEntry("result",
+                transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+                && transferTransactionById(txId).extract().bodyBytes == transferTransactionById(txId).extract().bodyBytes
+            )
+        ]),
+        TransferSet([
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset)
+        ])
+    )
+}

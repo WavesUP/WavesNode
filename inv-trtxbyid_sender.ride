@@ -1,0 +1,21 @@
+{-# STDLIB_VERSION 3 #-}
+{-# CONTENT_TYPE EXPRESSION #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes
+  && transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes == transferTransactionById(base58'8bC1ReLDDpn6eTuDzz7PTPFuURCpzksonDoGux3VMWgj').extract().bodyBytes

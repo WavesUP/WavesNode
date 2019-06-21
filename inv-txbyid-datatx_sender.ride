@@ -1,0 +1,21 @@
+{-# STDLIB_VERSION 2 #-}
+{-# CONTENT_TYPE EXPRESSION #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id
+  && transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id == transactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc').extract().id

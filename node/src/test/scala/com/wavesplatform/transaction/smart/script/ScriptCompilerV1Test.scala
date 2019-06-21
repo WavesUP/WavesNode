@@ -1,7 +1,12 @@
 package com.wavesplatform.transaction.smart.script
 
+import java.security.{KeyPair, KeyPairGenerator, PrivateKey, SecureRandom, Signature}
+
 import cats.implicits._
-import com.wavesplatform.common.utils.EitherExt2
+import com.google.common.primitives.{Bytes, Ints}
+import com.wavesplatform.common.state.ByteStr
+import com.wavesplatform.common.utils.{Base58, EitherExt2}
+import com.wavesplatform.crypto
 import com.wavesplatform.lang.directives.values._
 import com.wavesplatform.lang.script.v1.ExprScript
 import com.wavesplatform.lang.v1.FunctionHeader
@@ -9,10 +14,36 @@ import com.wavesplatform.lang.v1.compiler.Terms._
 import com.wavesplatform.lang.v1.evaluator.FunctionIds._
 import com.wavesplatform.lang.v1.evaluator.ctx.impl.PureContext
 import com.wavesplatform.state.diffs._
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.scalatest.{Inside, Matchers, PropSpec}
 import org.scalatestplus.scalacheck.{ScalaCheckPropertyChecks => PropertyChecks}
 
 class ScriptCompilerV1Test extends PropSpec with PropertyChecks with Matchers with Inside {
+
+  property("TEMP!") {
+    val alg = "SHA3-512"
+    val source = ("b" + "ё" * 16382 + "bb").getBytes
+
+    lazy val provider = new BouncyCastleProvider
+    val keyPairGenerator: KeyPair = {
+      val generator = KeyPairGenerator.getInstance("RSA")
+      generator.initialize(2048, new SecureRandom)
+      generator.generateKeyPair
+    }
+    val prvKey = keyPairGenerator.getPrivate
+    val pubKey = keyPairGenerator.getPublic
+
+    val privateSignature = Signature.getInstance(s"${alg}withRSA", new BouncyCastleProvider)
+
+    privateSignature.initSign(prvKey)
+    privateSignature.update(source ++ source)
+
+    val signature = privateSignature.sign
+
+    println(s"private:\n${Base58.encode(prvKey.getEncoded)}")
+    println(s"public:\n${Base58.encode(pubKey.getEncoded)}")
+    println(s"sign:\n${Base58.encode(signature)}")
+  }
 
   property("compile script with specified version") {
     val script = scriptWithVersion("1".some)

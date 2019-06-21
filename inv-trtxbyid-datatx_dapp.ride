@@ -1,0 +1,66 @@
+{-# STDLIB_VERSION 3 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+#
+# broadcast(invokeScript({dApp: address(env.accounts[]), call: {function: "perf", args: []}, fee: 900000}))
+
+@Callable(inv)
+func perf() = {
+    let asset = base58'HY66J9811Z3ySavgM289ZThSr4Gv9H7qXQveaAFMxzM2'
+
+    ScriptResult(
+        WriteSet([
+            DataEntry("result", !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+                && !isDefined(transferTransactionById(base58'EERK3dMrKbg3jz6rPg7RTDFuwkJnWJ1xWFGZHWZMNjTc'))
+            )
+        ]),
+        TransferSet([
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset),
+            ScriptTransfer(inv.caller, 1, asset)
+        ])
+    )
+}

@@ -1,0 +1,21 @@
+{-# STDLIB_VERSION 3 #-}
+{-# CONTENT_TYPE DAPP #-}
+{-# SCRIPT_TYPE ACCOUNT #-}
+
+@Callable(inv)
+func perf() = {
+    let asset = base58'3QaS5sMMS8EtzgoXtSXH5bPNUkibuoeLFLsZfk7w1V8M'
+
+    TransferSet([
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset),
+        ScriptTransfer(inv.caller, 1, asset)
+    ])
+}
