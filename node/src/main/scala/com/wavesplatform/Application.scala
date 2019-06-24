@@ -49,6 +49,7 @@ import monix.reactive.Observable
 import monix.reactive.subjects.ConcurrentSubject
 import org.influxdb.dto.Point
 import org.slf4j.LoggerFactory
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -369,6 +370,7 @@ object Application {
 
     // DO NOT LOG BEFORE THIS LINE, THIS PROPERTY IS USED IN logback.xml
     System.setProperty("waves.directory", config.getString("waves.directory"))
+    if (config.hasPath("waves.config.directory")) System.setProperty("waves.config.directory", config.getString("waves.config.directory"))
 
     val settings = WavesSettings.fromRootConfig(config)
 
@@ -426,7 +428,7 @@ object Application {
     val isMetricsStarted = Metrics.start(settings.metrics, time)
 
     RootActorSystem.start("wavesplatform", settings.config) { actorSystem =>
-      import actorSystem.dispatcher
+
       isMetricsStarted.foreach { started =>
         if (started) {
           import settings.synchronizationSettings.microBlockSynchronizer

@@ -52,10 +52,7 @@ package object settings {
 
   def loadConfig(maybeUserConfig: Option[Config]): Config = {
     val sysProps = ConfigFactory.defaultOverrides()
-
-    val external = maybeUserConfig
-      .fold(sysProps)(sysProps.withFallback)
-      .withFallback(ConfigFactory.parseString(s"waves.directory = $defaultDirectory"))
+    val external = maybeUserConfig.fold(sysProps)(sysProps.withFallback)
 
     val networkDefaults = {
       val withAppConf = external.withFallback(ConfigFactory.defaultApplication())
@@ -63,10 +60,13 @@ package object settings {
       withAppConf.getConfig(s"waves.defaults.$network")
     }
 
-    external
+    val cfg = external
       .withFallback(networkDefaults.atKey("waves"))
       .withFallback(ConfigFactory.defaultApplication())
       .withFallback(ConfigFactory.defaultReference())
+
+    cfg
+      .withFallback(ConfigFactory.parseString(s"waves.directory = ${defaultDirectory(cfg)}"))
       .resolve()
   }
 
