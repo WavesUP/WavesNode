@@ -62,11 +62,11 @@ package object settings {
 
     val cfg = external
       .withFallback(networkDefaults.atKey("waves"))
-      .withFallback(ConfigFactory.defaultApplication())
-      .withFallback(ConfigFactory.defaultReference())
 
     cfg
       .withFallback(ConfigFactory.parseString(s"waves.directory = ${defaultDirectory(cfg)}"))
+      .withFallback(ConfigFactory.defaultApplication())
+      .withFallback(ConfigFactory.defaultReference())
       .resolve()
   }
 
