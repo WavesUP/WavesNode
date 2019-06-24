@@ -61,6 +61,11 @@ object FullAssetInfo {
   implicit val fullAssetInfoFormat: Format[FullAssetInfo] = Json.format
 }
 
+case class NFTAssetInfo(assetId: String, reissuable: Boolean, quantity: Long, decimals: Byte)
+object NFTAssetInfo {
+  implicit val nftAssetInfo: Format[NFTAssetInfo] = Json.format
+}
+
 case class FullAssetsInfo(address: String, balances: List[FullAssetInfo])
 object FullAssetsInfo {
   implicit val fullAssetsInfoFormat: Format[FullAssetsInfo] = Json.format
@@ -111,7 +116,8 @@ case class TransactionInfo(`type`: Int,
                            height: Int,
                            minSponsoredAssetFee: Option[Long],
                            recipient: Option[String],
-                           script: Option[String]) extends TxInfo
+                           script: Option[String])
+    extends TxInfo
 object TransactionInfo {
   implicit val format: Format[TransactionInfo] = Json.format
 }
@@ -139,8 +145,6 @@ object AssetPairResponse {
   implicit val pairResponseFormat: Format[AssetPairResponse] = Json.format
 }
 
-
-
 case class StateChangesDetails(data: Seq[DataResponse], transfers: Seq[TransfersInfoResponse])
 object StateChangesDetails {
   implicit val stateChangeResponseFormat: Format[StateChangesDetails] = Json.format[StateChangesDetails]
@@ -155,8 +159,9 @@ case class DebugStateChanges(`type`: Int,
                              minSponsoredAssetFee: Option[Long],
                              recipient: Option[String],
                              script: Option[String],
-                             stateChanges: Option[StateChangesDetails]) extends TxInfo
-object DebugStateChanges{
+                             stateChanges: Option[StateChangesDetails])
+    extends TxInfo
+object DebugStateChanges {
   implicit val debugStateChanges: Format[DebugStateChanges] = Json.format
 }
 
