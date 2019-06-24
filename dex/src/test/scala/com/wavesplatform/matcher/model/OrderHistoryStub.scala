@@ -15,20 +15,20 @@ class OrderHistoryStub(system: ActorSystem, time: Time) {
   private val refs   = mutable.AnyRefMap.empty[Address, ActorRef]
   private val orders = mutable.AnyRefMap.empty[ByteStr, Address]
 
-  private def actorFor(lo: LimitOrder): ActorRef =
+  private def actorFor(ao: AcceptedOrder): ActorRef =
     refs.getOrElseUpdate(
-      lo.order.sender,
+      ao.order.sender,
       system.actorOf(
-        Props(
-          new AddressActor(
-            lo.order.sender,
-            _ => 0L,
-            5.seconds,
-            time,
-            new TestOrderDB(100),
-            _ => false,
-            e => Future.successful(Some(QueueEventWithMeta(0, 0, e))),
-          )))
+        Props(new AddressActor(
+          ao.order.sender,
+          _ => 0L,
+          5.seconds,
+          time,
+          new TestOrderDB(100),
+          _ => false,
+          e => Future.successful(Some(QueueEventWithMeta(0, 0, e))),
+          _ => OrderBook.AggregatedSnapshot()
+        )))
     )
 
   def ref(sender: Address): ActorRef  = refs(sender)
@@ -46,7 +46,7 @@ class OrderHistoryStub(system: ActorSystem, time: Time) {
       actorFor(ox.submitted) ! ox
 
     case oc: Events.OrderCanceled =>
-      actorFor(oc.limitOrder) ! oc
+      actorFor(oc.acceptedOrder) ! oc
   }
 
   def processAll(events: Events.Event*): Unit = events.foreach(process)

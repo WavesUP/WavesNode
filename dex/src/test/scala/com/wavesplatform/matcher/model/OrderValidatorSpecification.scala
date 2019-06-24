@@ -2,6 +2,7 @@ package com.wavesplatform.matcher.model
 
 import java.util.concurrent.ConcurrentHashMap
 
+import cats.implicits._
 import com.google.common.base.Charsets
 import com.wavesplatform.account.{Address, KeyPair}
 import com.wavesplatform.common.state.ByteStr
@@ -13,6 +14,7 @@ import com.wavesplatform.lang.script.v1.ExprScript
 import com.wavesplatform.lang.v1.compiler.Terms
 import com.wavesplatform.matcher.market.OrderBookActor.MarketStatus
 import com.wavesplatform.matcher.model.MatcherModel.{Denormalization, Normalization}
+import com.wavesplatform.matcher.model.OrderBook.AggregatedSnapshot
 import com.wavesplatform.matcher.model.OrderValidator.Result
 import com.wavesplatform.matcher.settings.OrderFeeSettings.{DynamicSettings, FixedSettings, OrderFeeSettings, PercentSettings}
 import com.wavesplatform.matcher.settings.{AssetType, DeviationsSettings, OrderRestrictionsSettings}
@@ -127,8 +129,8 @@ class OrderValidatorSpecification
 
       "order exists" in {
         val pk = KeyPair(randomBytes())
-        val ov = OrderValidator.accountStateAware(pk, defaultPortfolio.balanceOf, 1, _ => true)(_)
-        ov(newBuyOrder(pk, 1000)) should produce("OrderDuplicate")
+        val ov = OrderValidator.accountStateAware(pk, defaultPortfolio.balanceOf, 1, _ => true, _ => OrderBook.AggregatedSnapshot())(_)
+        ov(LimitOrder(newBuyOrder(pk, 1000))) should produce("OrderDuplicate")
       }
 
       "order price has invalid non-zero trailing decimals" in forAll(assetIdGen(1), accountGen, Gen.choose(1, 7)) {
@@ -487,6 +489,41 @@ class OrderValidatorSpecification
 
           validateByMatcherSettings(dynamicSettings, rateCache = rates)(order) should produce("FeeNotEnough")
       }
+
+      "price of market order is invalid" in forAll(orderGenerator) {
+        case (order, _) =>
+          def getBalance(spentAssetBalance: Long): Asset => Long = createTradableBalanceBySpentAssetWithFee(order)(spentAssetBalance)
+
+          def validateOrder(side: (Long, Long)*)(tradableBalance: Asset => Long): Order => Result[AcceptedOrder] = {
+            val levels      = side.map { case (p, a) => LevelAgg(a, p) }
+            val counterSide = if (order.isBuyOrder) AggregatedSnapshot(asks = levels) else AggregatedSnapshot(bids = levels)
+            validateMarketOrderByAccountStateAware(counterSide)(tradableBalance)
+          }
+
+          val orderAmount  = order.amount
+          val orderPrice   = order.price
+          val invalidPrice = if (order.isBuyOrder) orderPrice + 1 else orderPrice - 1
+          val betterPrice  = if (order.isBuyOrder) orderPrice - 1 else orderPrice + 1
+          val enough       = if (order.isBuyOrder) MatcherModel.getCost(orderAmount, orderPrice) else orderAmount
+
+          // validate market order by market state and order's owner balance
+          validateOrder { orderPrice   -> orderAmount } { getBalance(enough) }(order) shouldBe 'right
+          validateOrder { orderPrice   -> orderAmount } { getBalance(enough - 1) }(order) should produce("BalanceNotEnough")
+          validateOrder { invalidPrice -> orderAmount } { getBalance(enough * 2) }(order) should produce("InvalidMarketOrderPrice")
+
+          validateOrder(Seq.empty[(Long, Long)]: _*) { getBalance(enough) }(order) shouldBe 'right
+
+          validateOrder(
+            orderPrice   -> (orderAmount - 1), // level price is OK, amount is NOT OK
+            invalidPrice -> orderAmount // level price is NOT OK
+          ) { getBalance(enough) }(order) should produce("InvalidMarketOrderPrice")
+
+          validateOrder(
+            betterPrice  -> (orderAmount / 2), // level price is OK, amount is NOT OK
+            orderPrice   -> (orderAmount / 2 + 1), // level price is OK, amount is OK
+            invalidPrice -> orderAmount // level price is NOT OK, this doesn't matter
+          ) { getBalance(enough) }(order) shouldBe 'right
+      }
     }
 
     "verify script of matcherFeeAssetId" in {
@@ -697,11 +734,26 @@ class OrderValidatorSpecification
       p: Portfolio = defaultPortfolio,
       orderStatus: ByteStr => Boolean = _ => false,
       o: Order = newBuyOrder
-  )(f: OrderValidator.Result[Order] => A): A =
-    f(OrderValidator.accountStateAware(o.sender, tradableBalance(p), 0, orderStatus)(o))
+  )(f: OrderValidator.Result[AcceptedOrder] => A): A =
+    f(OrderValidator.accountStateAware(o.sender, tradableBalance(p), 0, orderStatus, _ => OrderBook.AggregatedSnapshot())(LimitOrder(o)))
+
+  private def validateMarketOrderByAccountStateAware(aggregatedSnapshot: AggregatedSnapshot)(b: Asset => Long): Order => Result[AcceptedOrder] = {
+    order =>
+      OrderValidator.accountStateAware(
+        sender = order.sender.toAddress,
+        tradableBalance = b,
+        activeOrderCount = 0,
+        orderExists = _ => false,
+        orderBookCache = _ => aggregatedSnapshot,
+      ) { MarketOrder(order, b) }
+  }
 
   private def msa(ba: Set[Address], o: Order) =
     OrderValidator.matcherSettingsAware(o.matcherPublicKey, ba, Set.empty, matcherSettings, rateCache) _
+
+  private def createTradableBalanceBySpentAssetWithFee(order: Order)(balanceBySpentAsset: Long): Asset => Long = {
+    (Map(order.getSpendAssetId -> balanceBySpentAsset) |+| Map(order.matcherFeeAssetId -> order.matcherFee)).apply _
+  }
 
   private def validateByMatcherSettings(orderFeeSettings: OrderFeeSettings,
                                         blacklistedAssets: Set[IssuedAsset] = Set.empty[IssuedAsset],
@@ -756,5 +808,9 @@ class OrderValidatorSpecification
 
     OrderValidator
       .blockchainAware(blockchain, transactionCreator, MatcherAccount.toAddress, ntpTime, orderFeeSettings, orderRestrictions, rateCache)(order)
+  }
+
+  private implicit class OrderOps(order: Order) {
+    def isBuyOrder: Boolean = order.orderType match { case OrderType.BUY => true; case _ => false }
   }
 }

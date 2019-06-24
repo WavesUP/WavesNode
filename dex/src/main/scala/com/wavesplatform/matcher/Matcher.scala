@@ -210,17 +210,21 @@ class Matcher(context: Context) extends Extension with ScorexLogging {
           context.spendableBalanceChanged,
           settings,
           address =>
-            Props(new AddressActor(
-              address,
-              context.utx.spendableBalance(address, _),
-              5.seconds,
-              context.time,
-              orderDb,
-              id => context.blockchain.filledVolumeAndFee(id) != VolumeAndFee.empty,
-              matcherQueue.storeEvent
-            )),
+            Props(
+              new AddressActor(
+                address,
+                context.utx.spendableBalance(address, _),
+                5.seconds,
+                context.time,
+                orderDb,
+                id => context.blockchain.filledVolumeAndFee(id) != VolumeAndFee.empty,
+                matcherQueue.storeEvent,
+                orderBookCache.get
+              )
+          ),
           historyRouter
-        )),
+        )
+      ),
       "addresses"
     )
 

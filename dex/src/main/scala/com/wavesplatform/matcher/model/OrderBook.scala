@@ -4,6 +4,7 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.matcher.model.Events._
 import com.wavesplatform.matcher.model.MatcherModel.Price
 import com.wavesplatform.transaction.assets.exchange.{Order, OrderType}
+import com.wavesplatform.utils.ScorexLogging
 import play.api.libs.functional.syntax._
 import play.api.libs.json._
 
@@ -11,6 +12,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 class OrderBook private (private[OrderBook] val bids: OrderBook.Side, private[OrderBook] val asks: OrderBook.Side) {
+
   import OrderBook._
 
   private[model] def getBids: OrderBook.Side = bids
@@ -26,7 +28,7 @@ class OrderBook private (private[OrderBook] val bids: OrderBook.Side, private[Or
     } yield price -> lo
   }
 
-  def cancel(orderId: ByteStr, timestamp: Long, tickSize: TickSize): Option[OrderCanceled] = {
+  def cancel(orderId: ByteStr, timestamp: Long): Option[OrderCanceled] = {
     allOrders.collectFirst {
       case (price, lo) if lo.order.id() == orderId =>
         (if (lo.order.orderType == OrderType.BUY) bids else asks).remove(price, lo.order.id())
@@ -35,49 +37,57 @@ class OrderBook private (private[OrderBook] val bids: OrderBook.Side, private[Or
   }
 
   def cancelAll(timestamp: Long): Seq[OrderCanceled] = {
-    val canceledOrders = allOrders.map { case (_, lo) => OrderCanceled(lo, unmatchable = false, timestamp) }.toSeq
+    val canceledOrders = allOrders.map { case (_, lo) => OrderCanceled(lo, isSystemCancel = false, timestamp) }.toSeq
     bids.clear()
     asks.clear()
     canceledOrders
   }
 
-  def add(o: Order, ts: Long, tickSize: TickSize = TickSize.Disabled): Seq[Event] =
-    (o.orderType match {
-      case OrderType.BUY  => doMatch(ts, buy, LimitOrder(o), Seq.empty, bids, asks, tickSize)
-      case OrderType.SELL => doMatch(ts, sell, LimitOrder(o), Seq.empty, asks, bids, tickSize)
-    }).reverse
+  def add(ao: AcceptedOrder, ts: Long, tickSize: TickSize = TickSize.Disabled): Seq[Event] = {
+    (
+      ao.order.orderType match {
+        case OrderType.BUY  => doMatch(ts, canMatchBuy, ao, Seq.empty, bids, asks, tickSize)
+        case OrderType.SELL => doMatch(ts, canMatchSell, ao, Seq.empty, asks, bids, tickSize)
+      }
+    ).reverse
+  }
 
   def snapshot: Snapshot                     = Snapshot(bids.toMap, asks.toMap)
   def aggregatedSnapshot: AggregatedSnapshot = AggregatedSnapshot(bids.aggregated.toSeq, asks.aggregated.toSeq)
 
-  override def toString = s"""{"bids":${formatSide(bids)},"asks":${formatSide(asks)}}"""
+  override def toString: String = s"""{"bids":${formatSide(bids)},"asks":${formatSide(asks)}}"""
 }
 
-object OrderBook {
+object OrderBook extends ScorexLogging {
+
   type Level        = Vector[LimitOrder]
   type Side         = mutable.TreeMap[Price, Level]
   type SideSnapshot = Map[Price, Seq[LimitOrder]]
 
   case class Snapshot(bids: SideSnapshot, asks: SideSnapshot)
-  case class AggregatedSnapshot(bids: Seq[LevelAgg] = Seq.empty, asks: Seq[LevelAgg] = Seq.empty)
+
+  case class AggregatedSnapshot(bids: Seq[LevelAgg] = Seq.empty, asks: Seq[LevelAgg] = Seq.empty) {
+    def getSideFor(acceptedOrder: AcceptedOrder): Seq[LevelAgg]        = if (acceptedOrder.isBuyOrder) bids else asks
+    def getCounterSideFor(acceptedOrder: AcceptedOrder): Seq[LevelAgg] = if (acceptedOrder.isBuyOrder) asks else bids
+  }
 
   implicit class SideExt(val side: Side) extends AnyVal {
+
     def best: Option[LimitOrder] = side.headOption.flatMap(_._2.headOption)
 
     final def removeBest(): LimitOrder = side.headOption match {
-      case l if l.forall(_._2.isEmpty) =>
-        throw new IllegalArgumentException("Cannot remove the best element from an empty level")
+      case l if l.forall(_._2.isEmpty) => throw new IllegalArgumentException("Cannot remove the best element from an empty level")
       case Some((price, level)) =>
         if (level.length == 1) side -= price
         else side += price -> level.tail
         level.head
     }
 
-    def replaceBest(newBestAsk: LimitOrder): Side = {
+    def replaceBest(newBest: LimitOrder): Side = {
       require(side.nonEmpty, "Cannot replace the best level of an empty side")
       val (price, level) = side.head
       require(level.nonEmpty, "Cannot replace the best element of an empty level")
-      side += (price -> (newBestAsk +: level.tail))
+      side += (price -> (newBest +: level.tail))
     }
 
     def remove(price: Price, orderId: ByteStr): LimitOrder = {
@@ -88,19 +98,15 @@ object OrderBook {
       toRemove.head
     }
 
-    def aggregated: Iterable[LevelAgg] =
-      for {
-        (p, l) <- side.view
-        if l.nonEmpty
-      } yield LevelAgg(l.map(_.amount).sum, p)
+    def aggregated: Iterable[LevelAgg] = for { (p, l) <- side.view if l.nonEmpty } yield LevelAgg(l.map(_.amount).sum, p)
   }
 
-  private object buy extends ((Long, Long) => Boolean) {
+  private object canMatchBuy extends ((Long, Long) => Boolean) {
     def apply(submittedPrice: Long, counterPrice: Long): Boolean = submittedPrice >= counterPrice
     override val toString                                        = "submitted >= counter"
   }
 
-  private object sell extends ((Long, Long) => Boolean) {
+  private object canMatchSell extends ((Long, Long) => Boolean) {
     def apply(submittedPrice: Long, counterPrice: Long): Boolean = submittedPrice <= counterPrice
     override val toString                                        = "submitted <= counter"
   }
@@ -127,41 +133,69 @@ object OrderBook {
   private def doMatch(
       eventTs: Long,
       canMatch: (Long, Long) => Boolean,
-      submitted: LimitOrder,
+      submitted: AcceptedOrder,
       prevEvents: Seq[Event],
       submittedSide: Side,
       counterSide: Side,
       tickSize: TickSize
-  ): Seq[Event] =
-    if (!submitted.order.isValid(eventTs)) OrderCanceled(submitted, false, eventTs) +: prevEvents
+  ): Seq[Event] = {
+    if (!submitted.order.isValid(eventTs)) OrderCanceled(submitted, isSystemCancel = false, eventTs) +: prevEvents
     else
       counterSide.best match {
         case counter if counter.forall(c => !canMatch(submitted.price, c.price)) =>
-          val correctedKey = correctPriceByTickSize(submitted.price, submitted.order.orderType, tickSize)
-          submittedSide += correctedKey -> (submittedSide.getOrElse(correctedKey, Vector.empty) :+ submitted)
-          OrderAdded(submitted, eventTs) +: prevEvents
+          submitted.fold { submittedLimitOrder =>
+            // place limit order into appropriate level according to the tick size
+            val correctedPrice = correctPriceByTickSize(submittedLimitOrder.price, submittedLimitOrder.order.orderType, tickSize)
+
+            submittedSide += correctedPrice -> (submittedSide.getOrElse(correctedPrice, Vector.empty) :+ submittedLimitOrder)
+            OrderAdded(submittedLimitOrder, eventTs) +: prevEvents
+
+          } { submittedMarketOrder =>
+            // cancel market order in the absence of counters
+            OrderCanceled(submittedMarketOrder, isSystemCancel = true, eventTs) +: prevEvents
+          }
         case Some(counter) =>
-          if (!submitted.isValid(counter.price)) {
-            OrderCanceled(submitted, true, eventTs) +: prevEvents
-          } else if (!counter.order.isValid(eventTs)) {
+          if (!submitted.isValid(counter.price)) OrderCanceled(submitted, isSystemCancel = true, eventTs) +: prevEvents
+          else if (!counter.order.isValid(eventTs)) {
+
             counterSide.removeBest()
             doMatch(eventTs, canMatch, submitted, OrderCanceled(counter, false, eventTs) +: prevEvents, submittedSide, counterSide, tickSize)
-          } else {
-            val x         = OrderExecuted(submitted, counter, eventTs)
-            val newEvents = x +: prevEvents
 
-            if (x.counterRemaining.isValid) {
-              counterSide.replaceBest(x.counterRemaining)
-              if (x.submittedRemaining.isValid) OrderCanceled(x.submittedRemaining, true, eventTs) +: newEvents
-              else newEvents
-            } else {
+          } else {
+
+            val orderExecutedEvent = OrderExecuted(submitted, counter, eventTs)
+            val newEvents          = orderExecutedEvent +: prevEvents
+
+            if (orderExecutedEvent.counterRemaining.isValid) { // counter is not filled
+
+              counterSide.replaceBest(orderExecutedEvent.counterRemaining)
+              val submittedRemaining = orderExecutedEvent.submittedRemaining
+              // if submitted is not filled (e.g. LimitOrder: rounding issues, MarkerOrder: afs = 0) cancel its remaining
+              if (submittedRemaining.isValid) OrderCanceled(submittedRemaining, isSystemCancel = true, eventTs) +: newEvents else newEvents
+
+            } else { // counter is filled
+
               counterSide.removeBest()
-              if (x.submittedRemaining.isValid) {
-                doMatch(eventTs, canMatch, x.submittedRemaining, newEvents, submittedSide, counterSide, tickSize)
-              } else newEvents
+
+              submitted match {
+                case _: LimitOrder =>
+                  val submittedRemaining = orderExecutedEvent.submittedRemaining
+                  if (submittedRemaining.isValid) doMatch(eventTs, canMatch, submittedRemaining, newEvents, submittedSide, counterSide, tickSize)
+                  else newEvents
+                case submittedMarketOrder: MarketOrder =>
+                  val submittedRemaining = orderExecutedEvent.submittedMarketRemaining(submittedMarketOrder)
+                  val isSubmittedFilled  = !submittedRemaining.isValid
+                  val canSpendMore       = submittedRemaining.availableForSpending > 0
+                  (isSubmittedFilled, canSpendMore) match {
+                    case (false, true)  => doMatch(eventTs, canMatch, submittedRemaining, newEvents, submittedSide, counterSide, tickSize)
+                    case (false, false) => OrderCanceled(submittedRemaining, isSystemCancel = true, eventTs) +: newEvents
+                    case (true, _)      => newEvents
+                  }
+              }
             }
           }
       }
+  }
 
   private def formatSide(side: Side) =
     side
@@ -186,7 +220,7 @@ object OrderBook {
       case js: JsObject =>
         val amount = (js \ "amount").as[Long]
         val order  = (js \ "order").as[Order]
-        val fee    = (js \ "fee").asOpt[Long].getOrElse(LimitOrder.partialFee(order.matcherFee, order.amount, amount))
+        val fee    = (js \ "fee").asOpt[Long].getOrElse(AcceptedOrder.partialFee(order.matcherFee, order.amount, amount))
         JsSuccess(limitOrder(amount, fee, order))
       case _ => JsError("failed to deserialize LimitOrder")
     },

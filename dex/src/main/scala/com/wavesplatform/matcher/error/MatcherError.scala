@@ -9,7 +9,7 @@ import com.wavesplatform.matcher.settings.{DeviationsSettings, OrderRestrictions
 import com.wavesplatform.transaction.Asset
 import com.wavesplatform.transaction.Asset.IssuedAsset
 import com.wavesplatform.transaction.assets.exchange.AssetPair.assetIdStr
-import com.wavesplatform.transaction.assets.exchange.{AssetPair, Order}
+import com.wavesplatform.transaction.assets.exchange.{AssetPair, Order, OrderType}
 import play.api.libs.json.{JsObject, Json}
 
 sealed class MatcherError(val code: Int, val message: MatcherErrorMessage) {
@@ -133,6 +133,9 @@ object MatcherError {
   case class OrderCanceled(id: Order.Id)  extends MatcherError(order, commonEntity, canceled, e"The order ${'id     -> id} is canceled")
   case class OrderFull(id: Order.Id)      extends MatcherError(order, commonEntity, limitReached, e"The order ${'id -> id} is filled")
   case class OrderFinalized(id: Order.Id) extends MatcherError(order, commonEntity, immutable, e"The order ${'id    -> id} is finalized")
+
+  case class MarketOrderCancel(id: Order.Id)
+      extends MatcherError(order, commonEntity, disabled, e"The market order ${'id -> id} cannot be cancelled manually")
 
   case class OrderVersionUnsupported(version: Byte, requiredFeature: BlockchainFeature)
       extends MatcherError(
@@ -276,6 +279,17 @@ object MatcherError {
         commonEntity,
         notFound,
         e"Order restrictions for the asset pair ${'assetPair -> assetPair} not found"
+      )
+
+  case class InvalidMarketOrderPrice(marketOrder: Order)
+      extends MatcherError(
+        order,
+        price,
+        notEnough,
+        if (marketOrder.orderType == OrderType.BUY)
+          e"Price of the buy market order (${'orderPrice -> marketOrder.price} ${'spendAsset -> AssetPair.assetIdStr(marketOrder.getSpendAssetId)}) is too low for its full execution with the current market state"
+        else
+          e"Price of the sell market order (${'orderPrice -> marketOrder.price} ${'spendAsset -> AssetPair.assetIdStr(marketOrder.getSpendAssetId)}) is too high for its full execution with the current market state"
       )
 
   sealed abstract class Entity(val code: Int)

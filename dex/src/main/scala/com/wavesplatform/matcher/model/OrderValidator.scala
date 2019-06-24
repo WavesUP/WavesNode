@@ -1,7 +1,6 @@
 package com.wavesplatform.matcher.model
 
 import cats.implicits._
-import cats.kernel.Monoid
 import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2
@@ -30,6 +29,7 @@ import kamon.Kamon
 import shapeless.Coproduct
 
 import scala.Either.cond
+import scala.annotation.tailrec
 import scala.math.BigDecimal.RoundingMode
 import scala.util.control.NonFatal
 
@@ -180,18 +180,6 @@ object OrderValidator {
     } yield order
   }
 
-  private def validateBalance(order: Order, tradableBalance: Asset => Long): Result[Order] = {
-    val lo               = LimitOrder(order)
-    val requiredForOrder = lo.requiredBalance
-
-    val available = requiredForOrder.keySet.map { assetId =>
-      assetId -> tradableBalance(assetId)
-    }.toMap
-
-    val negativeBalances = Monoid.combine(available, requiredForOrder.mapValues(-_)).filter(_._2 < 0)
-    cond(negativeBalances.isEmpty, order, MatcherError.BalanceNotEnough(requiredForOrder, available))
-  }
-
   private[matcher] def getValidFeeAssetForSettings(order: Order, orderFeeSettings: OrderFeeSettings, rateCache: RateCache): Set[Asset] =
     orderFeeSettings match {
       case _: DynamicSettings               => rateCache.getAllRates.keySet
@@ -229,14 +217,14 @@ object OrderValidator {
         lazy val receiveAmount = order.getReceiveAmount(order.amount, matchPrice).explicitGet()
         lazy val spentAmount   = order.getSpendAmount(order.amount, matchPrice).explicitGet()
 
-        val amountFactor = assetType match {
+        val amount = assetType match {
           case AssetType.AMOUNT    => order.amount
           case AssetType.PRICE     => if (order.orderType == OrderType.BUY) spentAmount else receiveAmount
           case AssetType.RECEIVING => receiveAmount
           case AssetType.SPENDING  => spentAmount
         }
 
-        multiplyAmountByDouble(amountFactor, multiplier * minFeeInPercent / 100)
+        multiplyAmountByDouble(amount, multiplier * minFeeInPercent / 100)
     }
   }
 
@@ -366,19 +354,70 @@ object OrderValidator {
     } yield order
   }
 
-  def accountStateAware(
-      sender: Address,
-      tradableBalance: Asset => Long,
-      activeOrderCount: => Int,
-      orderExists: ByteStr => Boolean,
-  )(order: Order): Result[Order] =
+  private def validateBalance(acceptedOrder: AcceptedOrder,
+                              tradableBalance: Asset => Long,
+                              orderBookCache: AssetPair => OrderBook.AggregatedSnapshot): Result[AcceptedOrder] = {
+
+    /**
+      * According to the current market state calculates cost for buy market orders or amount for sell market orders
+      * that should be covered by tradable balance of the order's owner.
+      * Returns InvalidMarketOrderPrice error in case of too low price of buy orders or too high price of sell orders
+      */
+    def getMarketOrderValue: Result[Long] = {
+
+      /** Adds value of level to the current value of the market order */
+      def accumulateLevel(level: LevelAgg, moValue: Result[Long], remainToExecute: Long): (Result[Long], Long) = {
+        val levelValue: Long => Long = amount => if (acceptedOrder.isBuyOrder) MatcherModel.getCost(amount, level.price) else amount
+        if (remainToExecute >= level.amount) moValue.map { _ + levelValue(level.amount) } -> (remainToExecute - level.amount)
+        else moValue.map { _ + levelValue(remainToExecute) }                              -> 0L
+      }
+
+      @tailrec
+      def go(levels: Seq[LevelAgg], currentValue: Result[Long], remainToExecute: Long): (Result[Long], Long) = {
+        (levels.headOption, currentValue) match {
+          case (_, value) if value.isLeft   => value                -> remainToExecute
+          case (None, fullMarketOrderValue) => fullMarketOrderValue -> remainToExecute
+          case (Some(level), value) =>
+            val isLevelPriceMatchable = if (acceptedOrder.isBuyOrder) acceptedOrder.price >= level.price else acceptedOrder.price <= level.price
+            (isLevelPriceMatchable, remainToExecute > 0) match {
+              case (true, true)  => val (newVal, newRTE) = accumulateLevel(level, value, remainToExecute); go(levels.tail, newVal, newRTE)
+              case (false, true) => MatcherError.InvalidMarketOrderPrice(acceptedOrder.order).asLeft[Long] -> remainToExecute
+              case _             => value -> remainToExecute
+            }
+        }
+      }
+
+      go(orderBookCache(acceptedOrder.order.assetPair).getCounterSideFor(acceptedOrder), 0L.asRight[MatcherError], acceptedOrder.amount)._1
+    }
+
+    def getRequiredBalanceForMarketOrder(marketOrder: MarketOrder, marketOrderValue: Long): Map[Asset, Long] = {
+      Map(marketOrder.spentAsset -> marketOrderValue) |+| Map(marketOrder.feeAsset -> marketOrder.requiredFee)
+    }
+
+    def validateTradableBalance(requiredForOrder: Map[Asset, Long]): Result[AcceptedOrder] = {
+      val availableBalances = acceptedOrder.availableBalanceBySpendableAssets(tradableBalance)
+      val negativeBalances  = availableBalances |+| requiredForOrder.mapValues { -_ } filter { case (_, balance) => balance < 0 }
+      cond(negativeBalances.isEmpty, acceptedOrder, MatcherError.BalanceNotEnough(requiredForOrder, availableBalances))
+    }
+
+    acceptedOrder match {
+      case mo: MarketOrder => getMarketOrderValue >>= (volume => validateTradableBalance { getRequiredBalanceForMarketOrder(mo, volume) })
+      case _               => validateTradableBalance(acceptedOrder.requiredBalance)
+    }
+  }
+
+  def accountStateAware(sender: Address,
+                        tradableBalance: Asset => Long,
+                        activeOrderCount: => Int,
+                        orderExists: ByteStr => Boolean,
+                        orderBookCache: AssetPair => OrderBook.AggregatedSnapshot)(acceptedOrder: AcceptedOrder): Result[AcceptedOrder] =
     for {
-      _ <- lift(order)
-        .ensure(MatcherError.UnexpectedSender(order.sender.toAddress, sender))(_.sender.toAddress == sender)
+      _ <- lift(acceptedOrder)
+        .ensure(MatcherError.UnexpectedSender(acceptedOrder.order.sender.toAddress, sender))(_.order.sender.toAddress == sender)
         .ensure(MatcherError.ActiveOrdersLimitReached(MaxActiveOrders))(_ => activeOrderCount < MaxActiveOrders)
-        .ensure(MatcherError.OrderDuplicate(order.id()))(o => !orderExists(o.id()))
-      _ <- validateBalance(order, tradableBalance)
-    } yield order
+        .ensure(MatcherError.OrderDuplicate(acceptedOrder.order.id()))(ao => !orderExists(ao.order.id()))
+      _ <- validateBalance(acceptedOrder, tradableBalance, orderBookCache)
+    } yield acceptedOrder
 
   private def lift[T](x: T): Result[T] = x.asRight[MatcherError]
   private def success: Result[Unit]    = lift(())

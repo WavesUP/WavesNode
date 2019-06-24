@@ -16,6 +16,7 @@ import com.wavesplatform.matcher.model.MatcherModel.Denormalization
 import com.wavesplatform.matcher.model.OrderValidator
 import com.wavesplatform.matcher.settings.PostgresConnection._
 import com.wavesplatform.matcher.settings.{OrderHistorySettings, PostgresConnection}
+import com.wavesplatform.transaction.assets.exchange.Order
 import com.wavesplatform.transaction.assets.exchange.Order.PriceConstant
 import com.wavesplatform.transaction.assets.exchange.OrderType.{BUY, SELL}
 import io.getquill.{PostgresJdbcContext, SnakeCase}
@@ -146,7 +147,7 @@ class OrderHistoryTestSuite extends MatcherSuiteBase {
   def getOrdersCount: Long = ctx.run(querySchema[OrderRecord]("orders", _.id      -> "id").size)
   def getEventsCount: Long = ctx.run(querySchema[EventRecord]("events", _.orderId -> "order_id").size)
 
-  case class OrderShortenedInfo(id: String, senderPublicKey: String, side: Byte, price: Double, amount: Double)
+  case class OrderShortenedInfo(id: String, tpe: Byte, senderPublicKey: String, side: Byte, price: Double, amount: Double)
   case class EventShortenedInfo(orderId: String, eventType: Byte, filled: Double, totalFilled: Double, status: Byte)
 
   def getOrderInfoById(orderId: String): Option[OrderShortenedInfo] =
@@ -155,6 +156,7 @@ class OrderHistoryTestSuite extends MatcherSuiteBase {
         querySchema[OrderShortenedInfo](
           "orders",
           _.id              -> "id",
+          _.tpe             -> "type",
           _.senderPublicKey -> "sender_public_key",
           _.side            -> "side",
           _.price           -> "price",
@@ -198,7 +200,6 @@ class OrderHistoryTestSuite extends MatcherSuiteBase {
   }
 
   "Order history should correctly save events for the big buy order" in {
-
     val buyOrder   = node.placeOrder(alice, wctUsdPair, BUY, 3 * amount, price, matcherFee).message.id
     val sellOrder1 = node.placeOrder(bob, wctUsdPair, SELL, amount, price, matcherFee).message.id
 
@@ -213,6 +214,10 @@ class OrderHistoryTestSuite extends MatcherSuiteBase {
     node.cancelOrder(alice, wctUsdPair, buyOrder)
 
     retry(10, batchLingerMs) {
+
+      getOrderInfoById(sellOrder1) shouldBe
+        Some(OrderShortenedInfo(sellOrder1, limitOrderType, bob.publicKey.toString, sellSide, denormalizedPrice, denormalizedAmount))
+
       getEventsInfoByOrderId(buyOrder) shouldBe
         Set(
           EventShortenedInfo(buyOrder, eventTrade, denormalizedAmount, denormalizedAmount, statusPartiallyFilled),
@@ -223,7 +228,6 @@ class OrderHistoryTestSuite extends MatcherSuiteBase {
   }
 
   "Order history should correctly save events for small and big orders" in {
-
     val smallBuyOrder = node.placeOrder(alice, wctUsdPair, BUY, amount, price, matcherFee).message.id
     val bigSellOrder  = node.placeOrder(bob, wctUsdPair, SELL, 5 * amount, price, matcherFee).message.id
 
@@ -233,16 +237,68 @@ class OrderHistoryTestSuite extends MatcherSuiteBase {
     retry(15, batchLingerMs) {
 
       getOrderInfoById(smallBuyOrder) shouldBe
-        Some(OrderShortenedInfo(smallBuyOrder, alice.publicKey.toString, buySide, denormalizedPrice, denormalizedAmount))
+        Some(OrderShortenedInfo(smallBuyOrder, limitOrderType, alice.publicKey.toString, buySide, denormalizedPrice, denormalizedAmount))
 
       getOrderInfoById(bigSellOrder) shouldBe
-        Some(OrderShortenedInfo(bigSellOrder, bob.publicKey.toString, sellSide, denormalizedPrice, 5 * denormalizedAmount))
+        Some(OrderShortenedInfo(bigSellOrder, limitOrderType, bob.publicKey.toString, sellSide, denormalizedPrice, 5 * denormalizedAmount))
 
       getEventsInfoByOrderId(smallBuyOrder).head shouldBe
         EventShortenedInfo(smallBuyOrder, eventTrade, denormalizedAmount, denormalizedAmount, statusFilled)
 
       getEventsInfoByOrderId(bigSellOrder).head shouldBe
         EventShortenedInfo(bigSellOrder, eventTrade, denormalizedAmount, denormalizedAmount, statusPartiallyFilled)
+    }
+  }
+
+  "Order history should correctly save market orders and their events" in {
+
+    node.cancelAllOrders(bob)
+    node.cancelAllOrders(alice)
+
+    // place buy market order into empty order book
+
+    def bigBuyOrder: Order        = node.prepareOrder(alice, wctUsdPair, BUY, 5 * amount, price, matcherFee)
+    val unmatchableMarketBuyOrder = node.placeMarketOrder(bigBuyOrder).message.id
+
+    node.waitOrderStatus(wctUsdPair, unmatchableMarketBuyOrder, "Filled").filledAmount shouldBe Some(0)
+
+    retry(15, batchLingerMs) {
+
+      getOrderInfoById(unmatchableMarketBuyOrder).get shouldBe
+        OrderShortenedInfo(unmatchableMarketBuyOrder, marketOrderType, alice.publicKey.toString, buySide, denormalizedPrice, 5 * denormalizedAmount)
+
+      val marketOrderEvent = getEventsInfoByOrderId(unmatchableMarketBuyOrder)
+
+      marketOrderEvent.size shouldBe 1
+      marketOrderEvent.head shouldBe EventShortenedInfo(unmatchableMarketBuyOrder, eventCancel, 0, 0, statusCancelled) // FIXME DEX-339 (should be statusFilled)
+    }
+
+    // place buy market order into nonempty order book
+
+    Seq(
+      node.placeOrder(bob, wctUsdPair, SELL, amount, (price * 0.97).toLong, matcherFee).message.id,
+      node.placeOrder(bob, wctUsdPair, SELL, amount, (price * 0.98).toLong, matcherFee).message.id,
+      node.placeOrder(bob, wctUsdPair, SELL, amount, (price * 0.98).toLong, matcherFee).message.id
+    ).foreach(lo => node.waitOrderStatus(wctUsdPair, lo, "Accepted"))
+
+    val marketBuyOrder = node.placeMarketOrder(bigBuyOrder).message.id
+    node.waitOrderStatus(wctUsdPair, marketBuyOrder, "Filled").filledAmount shouldBe Some(3 * amount)
+
+    retry(15, batchLingerMs) {
+
+      getOrderInfoById(marketBuyOrder) shouldBe
+        Some(OrderShortenedInfo(marketBuyOrder, marketOrderType, alice.publicKey.toString, buySide, denormalizedPrice, 5 * denormalizedAmount))
+
+      val marketOrderEvents = getEventsInfoByOrderId(marketBuyOrder)
+      marketOrderEvents.size shouldBe 4
+
+      marketOrderEvents shouldBe
+        Set(
+          EventShortenedInfo(marketBuyOrder, eventTrade, denormalizedAmount, 1 * denormalizedAmount, statusPartiallyFilled),
+          EventShortenedInfo(marketBuyOrder, eventTrade, denormalizedAmount, 2 * denormalizedAmount, statusPartiallyFilled),
+          EventShortenedInfo(marketBuyOrder, eventTrade, denormalizedAmount, 3 * denormalizedAmount, statusPartiallyFilled),
+          EventShortenedInfo(marketBuyOrder, eventCancel, 0, 3 * denormalizedAmount, statusCancelled) // FIXME DEX-339 (should be statusFilled)
+        )
     }
   }
 }

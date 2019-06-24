@@ -5,7 +5,8 @@ import com.google.common.primitives.Longs
 case class QueueEventWithMeta(offset: QueueEventWithMeta.Offset, timestamp: Long, event: QueueEvent) {
   override def toString: String = {
     val eventStr = event match {
-      case QueueEvent.Placed(o)           => s"Placed(${o.idStr()})"
+      case QueueEvent.Placed(lo)          => s"Placed(${lo.order.idStr()})"
+      case QueueEvent.PlacedMarket(mo)    => s"PlacedMarket(${mo.order.idStr()})"
       case QueueEvent.Canceled(_, id)     => s"Canceled($id)"
       case QueueEvent.OrderBookDeleted(p) => s"OrderBookDeleted(${p.key})"
     }

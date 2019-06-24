@@ -56,8 +56,9 @@ class OrderBookActor(owner: ActorRef,
         case _ =>
           lastProcessedOffset = Some(request.offset)
           request.event match {
-            case x: QueueEvent.Placed   => onAddOrder(request, x.order)
-            case x: QueueEvent.Canceled => onCancelOrder(request, x.orderId)
+            case QueueEvent.Placed(limitOrder)        => onAddOrder(request, limitOrder)
+            case QueueEvent.PlacedMarket(marketOrder) => onAddOrder(request, marketOrder)
+            case x: QueueEvent.Canceled               => onCancelOrder(request, x.orderId)
             case _: QueueEvent.OrderBookDeleted =>
               sender() ! GetOrderBookResponse(OrderBookResult(time.correctedTime(), assetPair, Seq.empty, Seq.empty))
               updateSnapshot(OrderBook.AggregatedSnapshot())
@@ -65,8 +66,7 @@ class OrderBookActor(owner: ActorRef,
               context.stop(self)
           }
       }
-    case ForceStartOrderBook(p) if p == assetPair =>
-      sender() ! OrderBookCreated(assetPair)
+    case ForceStartOrderBook(p) if p == assetPair => sender() ! OrderBookCreated(assetPair)
   }
 
   private def snapshotsCommands: Receive = {
@@ -92,8 +92,8 @@ class OrderBookActor(owner: ActorRef,
   private def processEvents(events: Iterable[Event]): Unit = {
     events.foreach { e =>
       e match {
-        case Events.OrderAdded(order, _) =>
-          log.info(s"OrderAdded(${order.order.id()}, amount=${order.amount})")
+        case Events.OrderAdded(order, _)                    => log.info(s"OrderAdded(${order.order.id()}, amount=${order.amount})")
+        case Events.OrderCanceled(order, isSystemCancel, _) => log.info(s"OrderCanceled(${order.order.idStr()}, system=$isSystemCancel)")
         case x @ Events.OrderExecuted(submitted, counter, timestamp) =>
           log.info(s"OrderExecuted(s=${submitted.order.idStr()}, c=${counter.order.idStr()}, amount=${x.executedAmount})")
           lastTrade = Some(LastTrade(counter.price, x.executedAmount, x.submitted.order.orderType))
@@ -104,8 +104,6 @@ class OrderBookActor(owner: ActorRef,
                           |o1: (amount=${submitted.amount}, fee=${submitted.fee}): ${Json.prettyPrint(submitted.order.json())}
                           |o2: (amount=${counter.amount}, fee=${counter.fee}): ${Json.prettyPrint(counter.order.json())}""".stripMargin)
           }
-        case Events.OrderCanceled(order, unmatchable, _) =>
-          log.info(s"OrderCanceled(${order.order.idStr()}, system=$unmatchable)")
       }
 
       addressActor ! e
@@ -115,17 +113,16 @@ class OrderBookActor(owner: ActorRef,
     updateSnapshot(orderBook.aggregatedSnapshot)
   }
 
-  private def onCancelOrder(event: QueueEventWithMeta, orderIdToCancel: ByteStr): Unit =
-    cancelTimer.measure(orderBook.cancel(orderIdToCancel, event.timestamp, actualRules.tickSize) match {
-      case Some(cancelEvent) =>
-        processEvents(List(cancelEvent))
-      case None =>
-        log.warn(s"Error applying $event: order not found")
-    })
+  private def onCancelOrder(event: QueueEventWithMeta, orderIdToCancel: ByteStr): Unit = cancelTimer.measure {
+    orderBook.cancel(orderIdToCancel, event.timestamp) match {
+      case Some(cancelEvent) => processEvents(List(cancelEvent))
+      case None              => log.warn(s"Error applying $event: order not found")
+    }
+  }
 
-  private def onAddOrder(eventWithMeta: QueueEventWithMeta, order: Order): Unit = addTimer.measure {
+  private def onAddOrder(eventWithMeta: QueueEventWithMeta, acceptedOrder: AcceptedOrder): Unit = addTimer.measure {
     log.trace(s"Applied $eventWithMeta, trying to match ...")
-    processEvents(orderBook.add(order, eventWithMeta.timestamp, actualRules.tickSize))
+    processEvents(orderBook.add(acceptedOrder, eventWithMeta.timestamp, actualRules.tickSize))
   }
 
   override def receiveCommand: Receive = fullCommands
@@ -182,7 +179,8 @@ object OrderBookActor {
         createTransaction,
         time,
         matchingRules
-      ))
+      )
+    )
 
   def name(assetPair: AssetPair): String = assetPair.toString
 
