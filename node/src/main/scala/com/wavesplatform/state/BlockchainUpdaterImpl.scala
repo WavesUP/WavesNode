@@ -23,7 +23,7 @@ import com.wavesplatform.transaction.TxValidationError.{BlockAppendError, Generi
 import com.wavesplatform.transaction._
 import com.wavesplatform.transaction.assets.IssueTransaction
 import com.wavesplatform.transaction.lease._
-import com.wavesplatform.utils.{CloseableIterator, ScorexLogging, Time, UnsupportedFeature, forceStopApplication}
+import com.wavesplatform.utils.{CloseableIterator, Schedulers, ScorexLogging, Time, UnsupportedFeature, forceStopApplication}
 import kamon.Kamon
 import monix.reactive.subjects.ConcurrentSubject
 import monix.reactive.{Observable, Observer}
@@ -54,7 +54,7 @@ class BlockchainUpdaterImpl(blockchain: LevelDBWriter, spendableBalanceChanged: 
   private var ngState: Option[NgState]              = Option.empty
   private var restTotalConstraint: MiningConstraint = MiningConstraints(blockchain, blockchain.height).total
 
-  private val service               = monix.execution.Scheduler.singleThread("last-block-info-publisher")
+  private val service               = Schedulers.singleThread("last-block-info-publisher")
   private val internalLastBlockInfo = ConcurrentSubject.publish[LastBlockInfo](service)
 
   override val settings: BlockchainSettings = wavesSettings.blockchainSettings
@@ -179,7 +179,7 @@ class BlockchainUpdaterImpl(blockchain: LevelDBWriter, spendableBalanceChanged: 
               metrics.forgeBlockTimeStats.measureSuccessful(ng.totalDiffOf(block.reference)) match {
                 case None => Left(BlockAppendError(s"References incorrect or non-existing block", block))
                 case Some((referencedForgedBlock, referencedLiquidDiff, carry, totalFee, discarded)) =>
-                  if (referencedForgedBlock.signaturesValid().isRight) {
+                  if (!verify || referencedForgedBlock.signaturesValid().isRight) {
                     if (discarded.nonEmpty) {
                       metrics.microBlockForkStats.increment()
                       metrics.microBlockForkHeightStats.record(discarded.size)
@@ -487,7 +487,16 @@ class BlockchainUpdaterImpl(blockchain: LevelDBWriter, spendableBalanceChanged: 
                                    types: Set[TransactionParser],
                                    fromId: Option[ByteStr]): CloseableIterator[(Height, Transaction)] =
     readLock {
-      addressTransactionsFromDiff(blockchain, ngState.map(_.bestLiquidDiff))(address, types, fromId)
+      val fromNg = ngState
+        .fold(CloseableIterator.empty[(Height, Transaction, Set[Address])]) { ng =>
+          ng.bestLiquidDiff
+            .reverseIterator(_.transactions)
+            .map {
+              case (_, (tx, addrs)) => (Height @@ this.height, tx, addrs)
+            }
+        }
+
+      addressTransactionsCompose(blockchain, fromNg)(address, types, fromId)
     }
 
   override def containsTransaction(tx: Transaction): Boolean = readLock {
