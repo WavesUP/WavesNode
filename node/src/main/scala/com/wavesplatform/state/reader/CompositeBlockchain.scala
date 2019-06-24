@@ -235,11 +235,11 @@ final case class CompositeBlockchain(inner: Blockchain, maybeDiff: Option[Diff],
 
   override def carryFee: Long = carry
 
-  override def blockBytes(height: Int): Option[Array[Type]] = inner.blockBytes(height)
+  override def blockBytes(height: Int): Option[Array[Byte]] = if (lastBlock.nonEmpty && height == this.height) lastBlock.map(_.bytes()) else inner.blockBytes(height)
 
-  override def blockBytes(blockId: ByteStr): Option[Array[Type]] = inner.blockBytes(blockId)
+  override def blockBytes(blockId: ByteStr): Option[Array[Byte]] = if (lastBlock.exists(_.uniqueId == blockId)) lastBlock.map(_.bytes()) else inner.blockBytes(blockId)
 
-  override def heightOf(blockId: ByteStr): Option[Int] = inner.heightOf(blockId)
+  override def heightOf(blockId: ByteStr): Option[Int] = if (lastBlock.exists(_.uniqueId == blockId)) Some(this.height) else inner.heightOf(blockId)
 
   /** Returns the most recent block IDs, starting from the most recent  one */
   override def lastBlockIds(howMany: Int): Seq[ByteStr] =
