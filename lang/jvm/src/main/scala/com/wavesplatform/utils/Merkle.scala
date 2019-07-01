@@ -35,8 +35,11 @@ object Merkle {
         if (arr(0) == MerkleProof.LeftSide) MerkleProof.LeftSide
         else MerkleProof.RightSide
       val hashLen = arr(1).toInt
-      val hash    = Digest32 @@ arr.slice(2, 2 + hashLen)
-      (side, hash, arr.drop(2 + hashLen))
+      if (hashLen < 0) throw new IndexOutOfBoundsException(s"Invalid proof hash length: $hashLen")
+      else {
+        val hash = Digest32 @@ arr.slice(2, 2 + hashLen)
+        (side, hash, arr.drop(2 + hashLen))
+      }
     }
 
     def parseLevels(arr: Array[Byte], acc: List[(Digest, Side)]): List[(Digest, Side)] = {
