@@ -4,8 +4,8 @@
 
 @Callable(inv)
 func perf(proof: ByteVector, pubKey: ByteVector) = {
-    let asset = base58'HwXYsaCnPcEyGR3iar9oG54fXHFggjzm2KMNdWkmznup'
-    let val = this.getBinaryValue("1")
+    let asset = base58'H4Le1cz3rZEzQxmEx2xLcrusC14FTU4s26vxdXgBXtCM'
+    let val = Address(base58'3FkYZXHjh92kxa8A3zsxnu5iL2ymc7rjnuu').getBinaryValue("32KbBinary")
     let source = val # + val
 
     ScriptResult(
