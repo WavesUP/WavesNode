@@ -43,6 +43,7 @@ object ExtensionAppender extends ScorexLogging {
               val forkApplicationResultEi = Coeval {
                 extension.view
                   .map { b =>
+                    log.debug(s"Trying to append block: $b")
                     b -> appendBlock(blockchainUpdater, utxStorage, pos, time, settings)(b).right
                       .map {
                         _.foreach(bh => BlockStats.applied(b, BlockStats.Source.Ext, bh))
@@ -54,7 +55,7 @@ object ExtensionAppender extends ScorexLogging {
                     case (i, declinedBlock, e) =>
                       e match {
                         case _: TxValidationError.BlockFromFuture =>
-                        case _                                  => invalidBlocks.add(declinedBlock.uniqueId, e)
+                        case _                                    => invalidBlocks.add(declinedBlock.uniqueId, e)
                       }
 
                       extension.view

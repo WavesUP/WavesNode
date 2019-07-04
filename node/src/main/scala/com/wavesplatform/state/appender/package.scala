@@ -59,9 +59,11 @@ package object appender extends ScorexLogging {
                                     time: Time,
                                     settings: WavesSettings,
                                     verify: Boolean)(block: Block): Either[ValidationError, Option[Int]] = {
-    val append: Block => Either[ValidationError, Option[Int]] =
-      if (verify) appendBlock(blockchainUpdater, utxStorage, pos, time, settings)
-      else appendBlock(blockchainUpdater, utxStorage, false)
+    val append: Block => Either[ValidationError, Option[Int]] = { block =>
+      log.debug(s"APPEND BLOCK: $block")
+      if (verify) appendBlock(blockchainUpdater, utxStorage, pos, time, settings)(block)
+      else appendBlock(blockchainUpdater, utxStorage, false)(block)
+    }
     append(block)
   }
 
