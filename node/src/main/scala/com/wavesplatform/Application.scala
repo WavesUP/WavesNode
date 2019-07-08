@@ -17,21 +17,24 @@ import com.wavesplatform.api.http._
 import com.wavesplatform.api.http.alias.{AliasApiRoute, AliasBroadcastApiRoute}
 import com.wavesplatform.api.http.assets.{AssetsApiRoute, AssetsBroadcastApiRoute}
 import com.wavesplatform.api.http.leasing.{LeaseApiRoute, LeaseBroadcastApiRoute}
+import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.consensus.PoSSelector
 import com.wavesplatform.consensus.nxt.api.http.NxtConsensusApiRoute
 import com.wavesplatform.db.openDB
 import com.wavesplatform.extensions.{Context, Extension}
 import com.wavesplatform.features.api.ActivationApiRoute
 import com.wavesplatform.history.StorageFactory
-import com.wavesplatform.http.{DebugApiRoute, NodeApiRoute, WavesApiRoute}
+import com.wavesplatform.http.{DebugApiRoute, NodeApiRoute}
+import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.metrics.Metrics
 import com.wavesplatform.mining.{Miner, MinerImpl}
 import com.wavesplatform.network.RxExtensionLoader.RxExtensionLoaderShutdownHook
 import com.wavesplatform.network._
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.Blockchain
+import com.wavesplatform.state.BlockchainUpdated
 import com.wavesplatform.state.appender.{BlockAppender, ExtensionAppender, MicroblockAppender}
-import com.wavesplatform.transaction.{Asset, Transaction}
+import com.wavesplatform.transaction.{Asset, BlockchainUpdater, DiscardedBlocks, Transaction}
 import com.wavesplatform.utils.Schedulers._
 import com.wavesplatform.utils.{LoggerFacade, NTP, ScorexLogging, SystemInformationReporter, Time, UtilApp}
 import com.wavesplatform.utx.{UtxPool, UtxPoolImpl}
@@ -68,8 +71,6 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
 
   private val spendableBalanceChanged = ConcurrentSubject.publish[(Address, Asset)]
 
-  private val blockchainUpdater = StorageFactory(settings, db, time, spendableBalanceChanged)
-
   private lazy val upnp = new UPnP(settings.networkSettings.uPnPSettings) // don't initialize unless enabled
 
   private val wallet: Wallet = try {
@@ -91,11 +92,19 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
   private val historyRepliesScheduler         = fixedPool(poolSize = 2, "history-replier", reporter = logReporter("History Replier"))
   private val minerScheduler                  = fixedPool(poolSize = 2, "miner-pool", reporter = logReporter("Miner"))
 
+  private val blockchainUpdatesScheduler = singleThread("blockchain-updates", reporter = log.error("Error on sending blockchain updates", _))
+  private val blockchainUpdated          = ConcurrentSubject.publish[BlockchainUpdated](scheduler)
+
+  private val blockchainUpdater =
+    StorageFactory(settings, db, time, spendableBalanceChanged, blockchainUpdated)
+
   private var rxExtensionLoaderShutdown: Option[RxExtensionLoaderShutdownHook] = None
   private var maybeUtx: Option[UtxPool]                                        = None
   private var maybeNetwork: Option[NS]                                         = None
 
   private var extensions = Seq.empty[Extension]
+
+  private val rollbackTo = (blockId: ByteStr) => Task(blockchainUpdater.removeAfter(blockId)).executeOn(appenderScheduler)
 
   def apiShutdown(): Unit = {
     for {
@@ -105,7 +114,9 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
   }
 
   def run(): Unit = {
-    checkGenesis(settings, blockchainUpdater)
+    // initialization
+    implicit val as: ActorSystem                 = actorSystem
+    implicit val materializer: ActorMaterializer = ActorMaterializer()
 
     if (wallet.privateKeyAccounts.isEmpty)
       wallet.generateNewAccounts(1)
@@ -146,6 +157,33 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
       }(scheduler)
 
     val historyReplier = new HistoryReplier(blockchainUpdater, settings.synchronizationSettings, historyRepliesScheduler)
+
+    // Extensions start
+    val extensionContext = new Context {
+      override def settings: WavesSettings                                                      = app.settings
+      override def blockchain: Blockchain with BlockchainUpdater                                = app.blockchainUpdater
+      override def rollbackTo(blockId: ByteStr): Task[Either[ValidationError, DiscardedBlocks]] = app.rollbackTo(blockId)
+      override def time: Time                                                                   = app.time
+      override def wallet: Wallet                                                               = app.wallet
+      override def utx: UtxPool                                                                 = utxStorage
+      override def broadcastTx(tx: Transaction): Unit                                           = allChannels.broadcastTx(tx, None)
+      override def spendableBalanceChanged: Observable[(Address, Asset)]                        = app.spendableBalanceChanged
+      override def actorSystem: ActorSystem                                                     = app.actorSystem
+      override def blockchainUpdated: Observable[BlockchainUpdated]                             = app.blockchainUpdated
+    }
+
+    extensions = settings.extensions.map { extensionClassName =>
+      val extensionClass = Class.forName(extensionClassName).asInstanceOf[Class[Extension]]
+      val ctor           = extensionClass.getConstructor(classOf[Context])
+      log.info(s"Enable extension: $extensionClassName")
+      ctor.newInstance(extensionContext)
+    }
+    extensions.foreach(_.start())
+
+    // Node start
+    // After this point, node actually starts doing something
+    checkGenesis(settings, blockchainUpdater)
+
     val network =
       NetworkServer(settings, lastBlockInfo, blockchainUpdater, historyReplier, utxStorage, peerDatabase, allChannels, establishedConnections)
     maybeNetwork = Some(network)
@@ -212,27 +250,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
       upnp.addPort(addr.getPort)
     }
 
-    implicit val as: ActorSystem                 = actorSystem
-    implicit val materializer: ActorMaterializer = ActorMaterializer()
-
-    val extensionContext = new Context {
-      override def settings: WavesSettings                               = app.settings
-      override def blockchain: Blockchain                                = app.blockchainUpdater
-      override def time: Time                                            = app.time
-      override def wallet: Wallet                                        = app.wallet
-      override def utx: UtxPool                                          = utxStorage
-      override def broadcastTx(tx: Transaction): Unit                    = allChannels.broadcastTx(tx, None)
-      override def spendableBalanceChanged: Observable[(Address, Asset)] = app.spendableBalanceChanged
-      override def actorSystem: ActorSystem                              = app.actorSystem
-    }
-
-    extensions = settings.extensions.map { extensionClassName =>
-      val extensionClass = Class.forName(extensionClassName).asInstanceOf[Class[Extension]]
-      val ctor           = extensionClass.getConstructor(classOf[Context])
-      log.info(s"Enable extension: $extensionClassName")
-      ctor.newInstance(extensionContext)
-    }
-
+    // API start
     if (settings.restAPISettings.enable) {
       val apiRoutes = Seq(
         NodeApiRoute(settings.restAPISettings, blockchainUpdater, () => apiShutdown()),
@@ -252,7 +270,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
           blockchainUpdater,
           peerDatabase,
           establishedConnections,
-          blockId => Task(blockchainUpdater.removeAfter(blockId)).executeOn(appenderScheduler),
+          app.rollbackTo,
           allChannels,
           utxStorage,
           miner,
@@ -262,7 +280,6 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
           scoreStatsReporter,
           configRoot
         ),
-        WavesApiRoute(settings.restAPISettings, wallet, utxStorage, allChannels, time),
         AssetsApiRoute(settings.restAPISettings, wallet, utxStorage, allChannels, blockchainUpdater, time)(apiScheduler),
         ActivationApiRoute(settings.restAPISettings, settings.featuresSettings, blockchainUpdater),
         AssetsBroadcastApiRoute(settings.restAPISettings, utxStorage, allChannels),
@@ -293,8 +310,6 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
       serverBinding = Await.result(httpFuture, 20.seconds)
       log.info(s"REST API was bound on ${settings.restAPISettings.bindAddress}:${settings.restAPISettings.port}")
     }
-
-    extensions.foreach(_.start())
 
     // on unexpected shutdown
     sys.addShutdownHook {
@@ -337,6 +352,9 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
       log.info("Stopping network services")
       network.shutdown()
 
+      blockchainUpdated.onComplete()
+
+      shutdownAndWait(blockchainUpdatesScheduler, "BlockchainUpdated")
       shutdownAndWait(minerScheduler, "Miner")
       shutdownAndWait(microblockSynchronizerScheduler, "MicroblockSynchronizer")
       shutdownAndWait(scoreObserverScheduler, "ScoreObserver")
