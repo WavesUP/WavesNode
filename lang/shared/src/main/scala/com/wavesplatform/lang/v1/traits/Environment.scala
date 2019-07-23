@@ -15,6 +15,7 @@ trait Environment {
   def tthis: Recipient.Address
   def transactionById(id: Array[Byte]): Option[Tx]
   def transferTransactionById(id: Array[Byte]): Option[Tx]
+  def transactionParser(bytes: Array[Byte]): Option[Tx]
   def transactionHeightById(id: Array[Byte]): Option[Long]
   def assetInfoById(id: Array[Byte]): Option[ScriptAssetInfo]
   def lastBlockOpt(): Option[BlockInfo]

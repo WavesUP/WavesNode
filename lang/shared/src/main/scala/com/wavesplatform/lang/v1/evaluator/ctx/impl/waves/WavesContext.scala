@@ -430,6 +430,24 @@ object WavesContext {
       case _                               => ???
     }
 
+    val transactionFromBytesF: BaseFunction =
+      NativeFunction(
+        "parseTransaction",
+        100,
+        TRANSACTION_FROM_BYTES,
+        UNION.create(UNIT :: anyTransactionType.typeList),
+        "parse transaction from bytes",
+        ("transactionBytes", BYTESTR, "transaction bytes")
+      ) {
+        case CONST_BYTESTR(txBytes) :: Nil =>
+          val maybeTxObj =
+            env
+              .transactionParser(txBytes)
+              .map(Bindings.transactionObject(_, proofsEnabled))
+
+          fromOptionCO(maybeTxObj).asRight[String]
+      }
+
     val sellOrdTypeCoeval: Eval[Either[String, CaseObj]]  = Eval.always(Right(ordType(OrdType.Sell)))
     val buyOrdTypeCoeval:  Eval[Either[String, CaseObj]]  = Eval.always(Right(ordType(OrdType.Buy)))
 
