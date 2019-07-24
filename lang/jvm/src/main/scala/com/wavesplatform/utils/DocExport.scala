@@ -35,6 +35,7 @@ object DocExport {
           override def accountBalanceOf(addressOrAlias: Recipient, assetId: Option[Array[Byte]]): Either[String, Long] = ???
           override def resolveAlias(name: String): Either[String, Recipient.Address]                                   = ???
           override def blockHeaderParser(bytes: Array[Byte]): Option[BlockHeader]                                      = ???
+          override def transactionParser(bytes: Array[Byte]): Option[Tx]                                               = ???
           override def tthis: Recipient.Address                                                                        = ???
         }
       )

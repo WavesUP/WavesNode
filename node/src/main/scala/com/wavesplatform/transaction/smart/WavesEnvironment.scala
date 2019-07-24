@@ -12,11 +12,11 @@ import com.wavesplatform.state._
 import com.wavesplatform.transaction.Asset.IssuedAsset
 import com.wavesplatform.transaction.assets.exchange.Order
 import com.wavesplatform.transaction.transfer.TransferTransaction
-import com.wavesplatform.transaction.{Asset, Transaction}
+import com.wavesplatform.transaction.{Asset, Transaction, TransactionParsers}
 import monix.eval.Coeval
 import shapeless._
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 object WavesEnvironment {
   type In = Transaction :+: Order :+: ScriptTransfer :+: CNil
@@ -126,6 +126,12 @@ class WavesEnvironment(nByte: Byte, in: Coeval[WavesEnvironment.In], h: Coeval[I
       generatorPublicKey = ByteStr(blockH.signerData.generator)
     )
   }
+
+  override def transactionParser(bytes: Array[Byte]): Option[Tx] =
+    TransactionParsers
+      .parseBytes(bytes)
+      .map(RealTransactionWrapper(_))
+      .toOption
 
   override def blockHeaderParser(bytes: Array[Byte]): Option[domain.BlockHeader] =
     Try {

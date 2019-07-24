@@ -445,7 +445,7 @@ object WavesContext {
         case _ => ???
       }
 
-    val transactionFromBytesF: BaseFunction =
+    val parseTransacitonF: BaseFunction =
       NativeFunction(
         "parseTransaction",
         100,
@@ -545,7 +545,8 @@ object WavesContext {
     ).map(withExtract) ::: List(assetInfoF, blockInfoByHeightF, transferTxByIdF, stringFromAddressF)
 
     lazy val v4Functions: List[BaseFunction] = List(
-      parseBlockHeaderF
+      parseBlockHeaderF,
+      parseTransacitonF
     )
 
     val functions = Map[StdLibVersion, List[BaseFunction]](

@@ -1,29 +1,31 @@
 package com.wavesplatform.state.diffs.smart.scenarios
 
 import cats.implicits._
+import com.wavesplatform.TransactionGen
 import com.wavesplatform.account.PublicKey
 import com.wavesplatform.block.{Block, BlockHeader, SignerData}
 import com.wavesplatform.common.utils._
 import com.wavesplatform.consensus.nxt.NxtLikeConsensusBlockData
+import com.wavesplatform.crypto._
 import com.wavesplatform.lang.Global
 import com.wavesplatform.lang.directives.DirectiveSet
 import com.wavesplatform.lang.directives.values.{Account, Expression, V4}
 import com.wavesplatform.lang.v1.CTX
-import com.wavesplatform.lang.v1.compiler.{ExpressionCompiler, Terms}
 import com.wavesplatform.lang.v1.compiler.Terms.EVALUATED
+import com.wavesplatform.lang.v1.compiler.{ExpressionCompiler, Terms}
 import com.wavesplatform.lang.v1.evaluator.EvaluatorV1
 import com.wavesplatform.lang.v1.evaluator.ctx.impl.waves.WavesContext
 import com.wavesplatform.lang.v1.evaluator.ctx.impl.{CryptoContext, PureContext}
 import com.wavesplatform.lang.v1.parser.Parser
+import com.wavesplatform.transaction.Transaction
 import com.wavesplatform.transaction.smart.WavesEnvironment
 import com.wavesplatform.utils.EmptyBlockchain
 import monix.eval.Coeval
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.{Matchers, PropSpec}
 import org.scalatestplus.scalacheck.{ScalaCheckPropertyChecks => PropertyChecks}
-import com.wavesplatform.crypto._
 
-class ParseFunctionsTest extends PropSpec with PropertyChecks with Matchers {
+class ParseFunctionsTest extends PropSpec with PropertyChecks with Matchers with TransactionGen {
 
   val blockheaderGen: Gen[BlockHeader] = {
     for {
@@ -49,7 +51,24 @@ class ParseFunctionsTest extends PropSpec with PropertyChecks with Matchers {
     }
   }
 
-  def scriptSrc(header: BlockHeader): String = {
+  val txGen: Gen[Transaction] = {
+    Gen.oneOf(
+      genesisGen,
+      paymentGen,
+      transferV1Gen,
+      transferV2Gen,
+      massTransferGen,
+      issueGen,
+      reissueGen,
+      burnGen,
+      createAliasGen,
+      leaseGen,
+      leaseCancelGen,
+      dataTransactionGen
+    )
+  }
+
+  def headerParseScript(header: BlockHeader): String = {
     val expectedReference    = Base64.encode(header.reference)
     val expectedGenerator    = Base64.encode(header.signerData.generator.bytes)
     val expectedGeneratorPK  = Base64.encode(header.signerData.generator.toAddress.bytes)
@@ -79,9 +98,29 @@ class ParseFunctionsTest extends PropSpec with PropertyChecks with Matchers {
     """.stripMargin
   }
 
+  def txParseScript(tx: Transaction): String = {
+    s"""
+      |{-# STDLIB_VERSION  4 #-}
+      |{-# CONTENT_TYPE DAPP #-}
+      |
+      |let bytes = base64'${Base64.encode(tx.bytes())}'
+      |
+      |isDefined(parseTransaction(bytes))
+    """.stripMargin
+  }
+
   property("should parse blockheader bytes") {
     forAll(blockheaderGen) { header =>
-      eval(scriptSrc(header)) shouldBe Right(Terms.TRUE)
+      eval(headerParseScript(header)) shouldBe Right(Terms.TRUE)
+    }
+  }
+
+  property("should parse transaction bytes") {
+    forAll(txGen) { tx =>
+      val bytesStr = Base64.encode(tx.bytes())
+      if (tx.bytes().length < 32 * 1024 || bytesStr.length < 12288) {
+        eval(txParseScript(tx)) shouldBe Right(Terms.TRUE)
+      }
     }
   }
 
