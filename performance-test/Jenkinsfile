@@ -64,7 +64,6 @@ def get_formated_acc_or_server_string(def acc_or_server_string, def identifier){
 
 @NonCPS
 def get_formated_preconditions_string(def preconditions_string, def identifier){
-    println preconditions_string
     def formated_preconditions_string=''
     def map = [:]
     List <String> mapList = []
@@ -90,7 +89,7 @@ def get_formated_preconditions_string(def preconditions_string, def identifier){
     return formated_preconditions_string.replaceAll(",\$", "");
 }
 
-stage('Aborting this build'){
+stage('Build information'){
     if (! params.branch || ! params.parameters )
     {
         echo "Aborting this build. Please run it again with the required parameters specified"
@@ -220,7 +219,7 @@ node('wavesnode'){
                                 }
                             }
                         } else{
-                            Utils.markStageSkippedForConditional('Build and updating Waves node')
+                            org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Build and updating Waves node')
                         }
                     }
                     stage('Restarting node') {
