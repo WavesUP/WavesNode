@@ -225,10 +225,6 @@ node('wavesnode'){
                         }
                     }
                     stage('Data drop') {
-                        boolean skipDataDrop = true
-                        if (data_drop || wallet_drop || matcher_data_drop) {
-                            skipDataDrop = false
-                        }
                         Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
                             restartNodeTasks["Restarting node ${it}"] = {
                                 Constants.REMOTE.host = it
@@ -248,8 +244,10 @@ node('wavesnode'){
                                     ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/matcher/data || true")
                                 }
                                 ut.remoteExec(true, "systemctl restart ${node_service_name}")
-                                if (skipDataDrop) org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Data drop')
                             }
+                        }
+                        if (!(data_drop || wallet_drop || matcher_data_drop)) {
+                            org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Data drop')
                         }
                     }
                     parallel updateNodeTasks
