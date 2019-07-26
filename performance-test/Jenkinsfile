@@ -101,9 +101,9 @@ stage('Build information'){
         json_parameters = get_json_objects()
 
         deploy_new_version = json_parameters.actions.deploy_new_version.toBoolean()
-        data_drop = json_parameters.actions.deploy_new_version.toBoolean()
-        wallet_drop = json_parameters.actions.deploy_new_version.toBoolean()
-        matcher_data_drop = json_parameters.actions.deploy_new_version.toBoolean()
+        data_drop = json_parameters.actions.data_drop.toBoolean()
+        wallet_drop = json_parameters.actions.wallet_drop.toBoolean()
+        matcher_data_drop = json_parameters.actions.matcher_data_drop.toBoolean()
 
         localCongTemplateMap = [
             blockchain_type: json_parameters.configs.blockchain.blockchain_type.join(' '),
