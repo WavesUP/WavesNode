@@ -113,10 +113,13 @@ stage('Aborting this build'){
             micro_block_interval: json_parameters.configs.miner.micro_block_interval.join(' '),
             max_transactions_in_micro_block: json_parameters.configs.miner.max_transactions_in_micro_block.join(' '),
             min_micro_block_age: json_parameters.configs.miner.min_micro_block_age.join(' '),
-            devnet_wallet_seed: Constants.DEVNET_WALLET_SEED,
-            influex_db_user: Constants.INFLUEX_DB_USER,
-            influex_db_password: Constants.INFLUEX_DB_PASSWORD ]
+            devnet_wallet_seed: '',
+            influex_db_user: '',
+            influex_db_password: '' ]
         println "'local.conf' parameters are specified:\n" + localCongTemplateMap + "\n"
+        localCongTemplateMap.devnet_wallet_seed = Constants.DEVNET_WALLET_SEED
+        localCongTemplateMap.influex_db_user = Constants.INFLUEX_DB_USER
+        localCongTemplateMap.influex_db_password = Constants.INFLUEX_DB_PASSWORD
 
         applicationTemplateMap = [
             chain_id: json_parameters.configs.generator.chain_id.join(' '),
@@ -167,9 +170,9 @@ node('wavesnode'){
                     step([$class: 'WsCleanup'])
                     ut.checkout(branch, repo_url)
                     sh "mkdir ${artifactsDir}"
-                }
 
-                stage('Generate generator configs') {
+                    echo "Generate generator configs"
+
                     String applicationConfFileContent = ut.generateSystemdServiceFileText(applicationConfTemplateLocation, applicationTemplateMap)
                     writeFile file: applicationConfLocation, text: applicationConfFileContent
                     sh "cp ${applicationConfLocation} ${artifactsDir}/"
@@ -182,28 +185,23 @@ node('wavesnode'){
                     Constants.REMOTE.user = userName
                     Constants.REMOTE.identityFile = identity
 
-                    stage('Generate local.conf') {
+                    stage('Build and updating Waves node') {
                         if (deploy_new_version) {
+                            echo "Generating local.conf"
                             String localConfFileContent = ut.generateSystemdServiceFileText(localConfTemplateLocation, localCongTemplateMap)
                             writeFile file: localConfLocation, text: localConfFileContent
                             sh "cp ${localConfLocation} ${artifactsDir}/"
-                        }
-                    }
 
-                    stage('Cleanup and Build ') {
-                        if (deploy_new_version) {
+                            echo "Building package"
                             ut.sbt 'clean packageAll'
                             debFileLocation = findFiles(glob: '**/*.deb')
                             debFileLocation.each {
                                 sh "cp ${it.path} ${artifactsDir}/"
                             }
-                        }
-                    }
 
-                    updateNodeTasks['Updating nodes'] = {
-                        stage('Updating nodes') {
-                            if (deploy_new_version) {
-                                Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
+                            echo "Updating nodes"
+                            Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
+                                updateNodeTasks["Updating node ${it}"] = {
                                     Constants.REMOTE.host = it
                                     Constants.REMOTE.name = it
                                     debFileLocation.each { deb ->
@@ -212,14 +210,8 @@ node('wavesnode'){
                                         ut.remoteExec(true, "systemctl stop ${node_service_name} || true")
                                         ut.remoteExec(true, "dpkg --force-confnew -i /tmp/${deb.name}")
                                     }
-                                }
-                            }
-                        }
-                        stage('Copying node configs') {
-                            if (deploy_new_version) {
-                                Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
-                                    Constants.REMOTE.host = it
-                                    Constants.REMOTE.name = it
+
+                                    echo "Updating node configs"
                                     ut.remoteExec(true, "setfacl -R -m u:${userName}:rwx ${parentDir localConfLocationOnNode}")
                                     ut.remoteExec(true, "rm -f ${localConfLocationOnNode} || true")
                                     ut.remotePut(localConfLocation, localConfLocationOnNode)
@@ -227,10 +219,13 @@ node('wavesnode'){
                                 }
                             }
                         }
-                        stage('Removing wallets and data') {
-                            Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
+                    }
+                    stage('Restarting node') {
+                        Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
+                            updateNodeTasks["Restarting node ${it}"] = {
                                 Constants.REMOTE.host = it
                                 Constants.REMOTE.name = it
+
                                 ut.remoteExec(true, "systemctl stop ${node_service_name} || true")
                                 if (data_drop) {
                                     ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/{data,peers.dat} || true")
@@ -241,18 +236,11 @@ node('wavesnode'){
                                 if (matcher_data_drop) {
                                     ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/matcher/data || true")
                                 }
+                                ut.remoteExec(true, "systemctl restart ${node_service_name}")
                             }
                         }
                     }
                     parallel updateNodeTasks
-
-                    stage('Restarting nodes') {
-                        Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
-                            Constants.REMOTE.host = it
-                            Constants.REMOTE.name = it
-                            ut.remoteExec(true, "systemctl restart ${node_service_name}")
-                        }
-                    }
                 }
             }
 
