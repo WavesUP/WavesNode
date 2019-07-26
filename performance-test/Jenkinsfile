@@ -226,7 +226,7 @@ node('wavesnode'){
                     }
                     stage('Data drop') {
                         boolean skipDataDrop = true
-                        if (data_drop || skipDataDrop || skipDataDrop) {
+                        if (data_drop || wallet_drop || matcher_data_drop) {
                             skipDataDrop = false
                         }
                         Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
