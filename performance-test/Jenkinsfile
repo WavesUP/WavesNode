@@ -194,16 +194,18 @@ node('wavesnode'){
 
                             echo "Building package"
                             ut.sbt 'clean packageAll'
+
                             debFileLocation = findFiles(glob: '**/*.deb')
                             debFileLocation.each {
                                 sh "cp ${it.path} ${artifactsDir}/"
                             }
 
-                            echo "Updating nodes"
                             Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
                                 updateNodeTasks["Updating node ${it}"] = {
                                     Constants.REMOTE.host = it
                                     Constants.REMOTE.name = it
+
+                                    echo "Updating nodes"
                                     debFileLocation.each { deb ->
                                         ut.remoteExec "[[ -f ${debFileLocationOnNode} ]] && sudo rm -f ${debFileLocationOnNode} || true"
                                         ut.remotePut(deb.path, '/tmp/' + deb.name)
@@ -230,12 +232,18 @@ node('wavesnode'){
 
                                 ut.remoteExec(true, "systemctl stop ${node_service_name} || true")
                                 if (data_drop) {
+
+                                    echo "Removing node state"
                                     ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/{data,peers.dat} || true")
                                 }
                                 if (wallet_drop) {
+
+                                    echo "Removing wallet data"
                                     ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/wallet || true")
                                 }
                                 if (matcher_data_drop) {
+
+                                    echo "Removing matcher data"
                                     ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/matcher/data || true")
                                 }
                                 ut.remoteExec(true, "systemctl restart ${node_service_name}")
