@@ -109,7 +109,7 @@ stage('Build information'){
         if (data_drop || wallet_drop || matcher_data_drop){
             skipDataDrop = false    
         }
-        
+
         localCongTemplateMap = [
             blockchain_type: json_parameters.configs.blockchain.blockchain_type.join(' '),
             custom_address_scheme_character: json_parameters.configs.blockchain.custom_address_scheme_character.join(' '),
@@ -249,7 +249,7 @@ node('wavesnode'){
                                     ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/matcher/data || true")
                                 }
                                 ut.remoteExec(true, "systemctl restart ${node_service_name}")
-                                if (skipThisStep) org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Data drop')
+                                if (skipDataDrop) org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Data drop')
                             }
                         }
                     }
