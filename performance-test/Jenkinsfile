@@ -28,6 +28,7 @@ def preconditionsConfTemplateLocation = 'performance-test/preconditions.conf.tem
 def debFileLocationOnNode = '/tmp/waves_deb'
 def debFileLocation = ''
 def node_service_name = 'waves-devnet'
+Boolean skipDataDrop = true
 
 properties([
     parameters([
@@ -105,6 +106,10 @@ stage('Build information'){
         wallet_drop = json_parameters.actions.deploy_new_version.toBoolean()
         matcher_data_drop = json_parameters.actions.deploy_new_version.toBoolean()
 
+        if (data_drop || wallet_drop || matcher_data_drop){
+            skipDataDrop = false    
+        }
+        
         localCongTemplateMap = [
             blockchain_type: json_parameters.configs.blockchain.blockchain_type.join(' '),
             custom_address_scheme_character: json_parameters.configs.blockchain.custom_address_scheme_character.join(' '),
@@ -224,29 +229,27 @@ node('wavesnode'){
                             org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Updating nodes')
                         }
                     }
-                    stage('Restarting nodes') {
+                    stage('Data drop') {
                         Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
                             restartNodeTasks["Restarting node ${it}"] = {
                                 Constants.REMOTE.host = it
                                 Constants.REMOTE.name = it
-
+                                
                                 ut.remoteExec(true, "systemctl stop ${node_service_name} || true")
                                 if (data_drop) {
-
                                     echo "Removing node state"
                                     ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/{data,peers.dat} || true")
                                 }
                                 if (wallet_drop) {
-
                                     echo "Removing wallet data"
                                     ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/wallet || true")
                                 }
                                 if (matcher_data_drop) {
-
                                     echo "Removing matcher data"
                                     ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/matcher/data || true")
                                 }
                                 ut.remoteExec(true, "systemctl restart ${node_service_name}")
+                                if (skipThisStep) org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Data drop')
                             }
                         }
                     }
