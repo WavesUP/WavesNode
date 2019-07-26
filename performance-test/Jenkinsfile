@@ -221,7 +221,7 @@ node('wavesnode'){
                                 }
                             }
                         } else{
-                            org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Build and updating Waves node')
+                            org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Updating nodes')
                         }
                     }
                     stage('Restarting nodes') {
