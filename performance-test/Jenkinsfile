@@ -5,6 +5,7 @@ import devops.waves.*
 ut = new utils()
 def json_parameters = [:]
 def updateNodeTasks = [:]
+def restartNodeTasks = [:]
 def localCongTemplateMap = [:]
 def applicationTemplateMap = [:]
 def preconditionsConfMap = [:]
@@ -218,11 +219,13 @@ node('wavesnode'){
                                     ut.remoteExec(true, "chown ${node_service_name}:${node_service_name} ${localConfLocationOnNode}")
                                 }
                             }
+                        } else{
+                            Utils.markStageSkippedForConditional('Build and updating Waves node')
                         }
                     }
                     stage('Restarting node') {
                         Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
-                            updateNodeTasks["Restarting node ${it}"] = {
+                            restartNodeTasks["Restarting node ${it}"] = {
                                 Constants.REMOTE.host = it
                                 Constants.REMOTE.name = it
 
@@ -241,6 +244,7 @@ node('wavesnode'){
                         }
                     }
                     parallel updateNodeTasks
+                    parallel restartNodeTasks
                 }
             }
 
