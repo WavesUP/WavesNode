@@ -28,7 +28,6 @@ def preconditionsConfTemplateLocation = 'performance-test/preconditions.conf.tem
 def debFileLocationOnNode = '/tmp/waves_deb'
 def debFileLocation = ''
 def node_service_name = 'waves-devnet'
-Boolean skipDataDrop = true
 
 properties([
     parameters([
@@ -105,10 +104,6 @@ stage('Build information'){
         data_drop = json_parameters.actions.deploy_new_version.toBoolean()
         wallet_drop = json_parameters.actions.deploy_new_version.toBoolean()
         matcher_data_drop = json_parameters.actions.deploy_new_version.toBoolean()
-
-        if (data_drop || wallet_drop || matcher_data_drop){
-            skipDataDrop = false    
-        }
 
         localCongTemplateMap = [
             blockchain_type: json_parameters.configs.blockchain.blockchain_type.join(' '),
@@ -230,6 +225,10 @@ node('wavesnode'){
                         }
                     }
                     stage('Data drop') {
+                        boolean skipDataDrop = true
+                        if (data_drop || skipDataDrop || skipDataDrop) {
+                            skipDataDrop = false
+                        }
                         Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
                             restartNodeTasks["Restarting node ${it}"] = {
                                 Constants.REMOTE.host = it
