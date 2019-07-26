@@ -224,7 +224,7 @@ node('wavesnode'){
                             org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Build and updating Waves node')
                         }
                     }
-                    stage('Restarting nodes) {
+                    stage('Restarting nodes') {
                         Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
                             restartNodeTasks["Restarting node ${it}"] = {
                                 Constants.REMOTE.host = it
