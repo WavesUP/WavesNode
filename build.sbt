@@ -74,6 +74,14 @@ lazy val benchmark = project
   )
 
 lazy val `blockchain-updates` = project.dependsOn(node % "compile;test->test;runtime->provided")
+  .enablePlugins(JavaAppPackaging, com.typesafe.sbt.packager.docker.DockerPlugin)
+  .settings(
+    mainClass in Compile := Some("com.wavesplatform.data.VolkMain"),
+    dockerBaseImage := "openjdk:8-jre-stretch",
+    dockerUsername := Some("karasiq"),
+    dockerUpdateLatest := true,
+    packageName in Docker := "waves-script-monitor"
+  )
 
 lazy val it = project
   .settings(
