@@ -12,6 +12,7 @@ import net.ceedubs.ficus.readers.{NameMapper, ValueReader}
 import org.apache.commons.lang3.SystemUtils
 
 import scala.collection.JavaConverters._
+import scala.util.Try
 
 package object settings {
   implicit val hyphenCase: NameMapper = HyphenNameMapper
@@ -81,7 +82,7 @@ package object settings {
 
     def nixDefaultDirectory: String = {
       val maybeXdgDir = sys.env.get("XDG_DATA_HOME")
-      val defaultDir = s"$${user.home}/.local/share"
+      val defaultDir  = s"$${user.home}/.local/share"
 
       maybeXdgDir getOrElse defaultDir
     }
