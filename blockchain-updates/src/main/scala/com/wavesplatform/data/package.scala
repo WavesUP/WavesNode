@@ -35,7 +35,7 @@ package object data {
         ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
         util.Arrays.asList(sys.env.getOrElse("VOLK_KAFKA", "kafka-dev.wvservices.com:9092"))
       )
-      props.put(ConsumerConfig.GROUP_ID_CONFIG, "Volk s vol strit")
+      props.put(ConsumerConfig.GROUP_ID_CONFIG, "Volk s vol strit_transfers")
       props.put(ConsumerConfig.CLIENT_ID_CONFIG, "Volk s vol strit")
       props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
       props.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "30000")

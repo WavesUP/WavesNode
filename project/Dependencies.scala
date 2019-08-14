@@ -32,7 +32,8 @@ object Dependencies {
 
   private val quill = Seq(
     "org.postgresql" % "postgresql"  % "9.4.1208",
-    "io.getquill"    %% "quill-jdbc" % "3.1.0"
+    "io.getquill"    %% "quill-jdbc" % "3.1.0",
+    "com.h2database" % "h2" % "1.4.192",
   )
 
   val scalaTest = "org.scalatest" %% "scalatest" % "3.0.6" % Test
@@ -158,7 +159,7 @@ object Dependencies {
       akkaModule("testkit")               % Test,
       akkaHttpModule("akka-http-testkit") % Test,
       ("org.iq80.leveldb" % "leveldb" % "0.9").exclude("com.google.guava", "guava") % Test
-    ) ++ protobuf.value ++ test ++ console
+    ) ++ protobuf.value ++ test ++ console ++ quill
   )
 
   lazy val matcher = Seq(
