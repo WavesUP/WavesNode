@@ -23,7 +23,7 @@ object VolkMain extends App with ScorexLogging {
 
     import io.getquill._
 
-    private[this] lazy val ctx = new H2JdbcContext(SnakeCase, "volk.db")
+    private[this] lazy val ctx = new H2JdbcContext(SnakeCase, "volk.db.ctx")
 
     import ctx.{lift => liftQ, _}
 
@@ -50,15 +50,54 @@ object VolkMain extends App with ScorexLogging {
       }
       try run(q) catch { case NonFatal(_) => }
     }
+
+    def getNewAffected(addresses: Seq[String], tags: Set[String]): Map[String, Set[String]] = {
+      val q = quote {
+        query[WatchedAddress].filter(a => liftQuery(addresses).contains(a.address) && liftQuery(tags).contains(a.tag))
+      }
+
+      val existing = run(q).groupBy(_.address).mapValues(_.map(_.tag).toSet)
+      val result = existing.map { case (addr, addrTags) =>
+          addr -> (addrTags -- existing.getOrElse(addr, Set.empty))
+      }
+      result.filter(_._2.nonEmpty)
+    }
+
+    def deleteTags(tags: Set[String]): Unit = {
+      val q = quote(query[WatchedAddress].filter(wa => liftQuery(tags).contains(wa.tag)).delete)
+      run(q)
+    }
+
+    def deleteAddresses(addr: Set[String], tags: Set[String]): Unit = {
+      val q = quote(query[WatchedAddress].filter(wa => liftQuery(addr).contains(wa.address) && liftQuery(tags).contains(wa.tag)))
+      run(q)
+    }
   }
 
   val server = new Directives {
-    val route = (path("command") & formField("text")) { text =>
-      val Array(addr, tagsStr) = text.split(" ", 2)
-      val tags = tagsStr.split(",")
-      VolkDB.markAddress(addr, tags.toSet)
-      complete(StatusCodes.OK)
-    }
+    val route = (path("command") & formFields("command", "text"))((command, text) =>command match {
+      case "/add" =>
+        val Array(addr, tagsStr) = text.split(" ", 2)
+        val tags = tagsStr.split(",")
+        VolkDB.markAddress(addr, tags.toSet)
+        complete(StatusCodes.OK)
+
+      case "/remove" =>
+        text.split(" ") match {
+          case Array(tags, addrs @ _*) =>
+            val tagsSet = tags.split(",").toSet
+            VolkDB.deleteAddresses(addrs.toSet, tagsSet)
+            complete(StatusCodes.OK)
+
+          case Array(tags) =>
+            val tagsSet = tags.split(",").toSet
+            VolkDB.deleteTags(tagsSet)
+            complete(StatusCodes.OK)
+
+          case _ =>
+            complete(StatusCodes.BadRequest)
+        }
+    })
   }
 
   object Channels {
@@ -78,7 +117,7 @@ object VolkMain extends App with ScorexLogging {
                  |Height: *$height*
                  |Transaction: `$txId`
                  |Sender: `$from`
-                 |Recipients: ${to.map("`" + _ + "`").mkString(", ")}
+                 |Newly affected recipients: ${to.map("`" + _ + "`").mkString(", ")}
                  |Tags: ${tags.map("*" + _ + "*").mkString(", ")}
                  |""".stripMargin, "link_names" -> 1).toString()
           )
@@ -94,11 +133,6 @@ object VolkMain extends App with ScorexLogging {
   implicit val materializer = ActorMaterializer()
 
   import actorSystem.dispatcher
-
-  VolkDB.markAddress("3PGGv4a9LquYJ9SLU3JEh4g9caTJh6zuwKs", Set("test"))
-  VolkDB.markAddress("3P23fi1qfVw6RVDn4CH2a5nNouEtWNQ4THs", Set("test"))
-  VolkDB.markAddress("3PMT9wun7BB7JABSuhTJpFgJoegRfYw2e6d", Set("test"))
-  VolkDB.markAddress("3PHxaBWnwaWSyvjzXHwWbDF5s4R4YDyZAhS", Set("test"))
 
   Http().bindAndHandle(server.route, "0.0.0.0", 1234).onComplete {
     case Success(value) =>
@@ -140,14 +174,19 @@ object VolkMain extends App with ScorexLogging {
             balances.flatMap(b => PBRecipients.toAddress(b.address.toByteArray).toOption)
         }
 
-        if (affected.nonEmpty) senderMap(sender.stringRepr) = senderMap.getOrElse(sender.stringRepr, 0) + 1
+        if (affected.nonEmpty)
+          senderMap(sender.stringRepr) = senderMap.getOrElse(sender.stringRepr, 0) + 1
 
-        if (tags.nonEmpty && affected.nonEmpty) {
+        lazy val newAffected =  VolkDB.getNewAffected(affected.map(_.stringRepr), tags)
+
+        if (tags.nonEmpty && newAffected.nonEmpty) {
           // log.info(s"State updates: $stateUpdates")
-          affected.foreach(addr => VolkDB.markAddress(addr.stringRepr, tags))
+          newAffected.foreach { case (addr, tags) =>
+            VolkDB.markAddress(addr, tags)
+          }
 
           val txId = PBTransactions.vanilla(tx, unsafe = true).fold(_ => ByteStr.empty, _.id())
-          Channels.env.foreach(sendNotification(_, height, txId, sender.stringRepr, affected.map(_.stringRepr), tags))
+          Channels.env.foreach(sendNotification(_, height, txId, sender.stringRepr, newAffected.keys.toSeq, tags))
         }
       }
 

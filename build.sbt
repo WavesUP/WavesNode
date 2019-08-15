@@ -80,7 +80,10 @@ lazy val `blockchain-updates` = project.dependsOn(node % "compile;test->test;run
     dockerBaseImage := "openjdk:8-jre-stretch",
     dockerUsername := Some("karasiq"),
     dockerUpdateLatest := true,
-    packageName in Docker := "waves-script-monitor"
+    dockerExposedVolumes += "/opt/docker/volk",
+    dockerExposedPorts += 1234,
+    packageName in Docker := "waves-script-monitor",
+    envVars in Docker += "VOLK_DB" -> "/opt/docker/volk/state"
   )
 
 lazy val it = project
