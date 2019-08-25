@@ -211,14 +211,17 @@ node('wavesnode'){
                             Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
                                 updateNodeTasks["Updating node ${it}"] = {
                                     echo "Updating nodes"
-                                    
+                                        println remote.it
                                         debFileLocation.each { deb ->
                                             ut.remoteExec(remote.it, true, "bash -c '[[ -f ${debFileLocationOnNode} ]] && rm -rf ${debFileLocationOnNode} || true'")
+                                            println remote.it
                                             ut.remotePut(remote.it, deb.path, '/tmp/' + deb.name)
+                                            println remote.it
                                             ut.remoteExec(remote.it, true, "systemctl stop ${node_service_name} || true")
+                                            println remote.it
                                             ut.remoteExec(remote.it, true, "dpkg --force-confnew -i /tmp/${deb.name}")
                                         }
-
+                                        println remote.it
                                         echo "Updating node configs"
                                         ut.remoteExec(remote.it, true, "setfacl -R -m u:${userName}:rwx ${parentDir localConfLocationOnNode}")
                                         ut.remoteExec(remote.it, true, "rm -f ${localConfLocationOnNode} || true")
