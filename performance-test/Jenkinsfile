@@ -207,7 +207,7 @@ node('wavesnode'){
 
                                     echo "Updating nodes"
                                     debFileLocation.each { deb ->
-                                        ut.remoteExec "{ [[ -f ${debFileLocationOnNode} ]] && sudo rm -f ${debFileLocationOnNode} ;} || true"
+                                        ut.remoteExec(true, "[[ -f ${debFileLocationOnNode} ]] && sudo rm -f ${debFileLocationOnNode} || true")
                                         ut.remotePut(deb.path, '/tmp/' + deb.name)
                                         ut.remoteExec(true, "systemctl stop ${node_service_name} || true")
                                         ut.remoteExec(true, "dpkg --force-confnew -i /tmp/${deb.name}")
@@ -233,15 +233,15 @@ node('wavesnode'){
                                 ut.remoteExec(true, "systemctl stop ${node_service_name} || true")
                                 if (data_drop) {
                                     echo "Removing node state"
-                                    ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/{data,peers.dat} || true")
+                                    ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/{data,peers.dat}")
                                 }
                                 if (wallet_drop) {
                                     echo "Removing wallet data"
-                                    ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/wallet || true")
+                                    ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/wallet")
                                 }
                                 if (matcher_data_drop) {
                                     echo "Removing matcher data"
-                                    ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/matcher/data || true")
+                                    ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/matcher/data")
                                 }
                                 ut.remoteExec(true, "systemctl restart ${node_service_name}")
                             }
@@ -272,7 +272,7 @@ node('wavesnode'){
         finally{
             sh "tar -czvf artifacts.tar.gz -C ${artifactsDir} ."
             archiveArtifacts artifacts: 'artifacts.tar.gz'
-            ut.notifySlack("mtuktarov-test", currentBuild.result)
+            ut.notifySlack("jenkins-notifications", currentBuild.result)
         }
     }
 }
