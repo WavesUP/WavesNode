@@ -208,7 +208,7 @@ node('wavesnode'){
                                     remote.it.user = userName
                                     remote.it.identityFile = identity
 
-                                    echo remote.it
+                                    println remote.it
 
                                     echo "Updating nodes"
                                     debFileLocation.each { deb ->
