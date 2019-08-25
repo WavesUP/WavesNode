@@ -207,7 +207,6 @@ node('wavesnode'){
                                 remote["${serverName}"].user = userName
                                 remote["${serverName}"].identityFile = identity
                                 updateNodeTasks["Updating node ${serverName}"] = { 
-                                    stage('Updating nodes') {
                                     echo "Updating nodes"
                                         println remote.serverName
                                         debFileLocation.each { deb ->
@@ -226,7 +225,6 @@ node('wavesnode'){
                                         ut.remotePut(remote["${serverName}"], localConfLocation, localConfLocationOnNode)
                                         ut.remoteExec(remote["${serverName}"], true, "chown ${node_service_name}:${node_service_name} ${localConfLocationOnNode}")
                                 }
-                            }
                                 
                             }
                             parallel updateNodeTasks
