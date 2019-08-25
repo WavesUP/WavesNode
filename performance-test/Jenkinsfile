@@ -211,7 +211,7 @@ node('wavesnode'){
                             Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
                                 updateNodeTasks["Updating node ${it}"] = {
                                     echo "Updating nodes"
-                                    {
+                                    
                                         debFileLocation.each { deb ->
                                             ut.remoteExec(remote.it, true, "bash -c '[[ -f ${debFileLocationOnNode} ]] && rm -rf ${debFileLocationOnNode} || true'")
                                             ut.remotePut(remote.it, deb.path, '/tmp/' + deb.name)
@@ -225,7 +225,7 @@ node('wavesnode'){
                                         ut.remotePut(remote.it, localConfLocation, localConfLocationOnNode)
                                         ut.remoteExec(remote.it, true, "chown ${node_service_name}:${node_service_name} ${localConfLocationOnNode}")
                                 }
-                                }
+                                parallel updateNodeTasks
                             }
                         } else{
                             org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Updating nodes')
@@ -255,7 +255,7 @@ node('wavesnode'){
                             org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Data drop')
                         }
                     }
-                    parallel updateNodeTasks
+                    
                     parallel restartNodeTasks
                 }
             }
