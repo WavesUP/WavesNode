@@ -210,9 +210,9 @@ node('wavesnode'){
 
                             }
                             Constants.DEVNET_PERFORMANCE_TEST_NODES.each { serverName -> 
-                                updateNodeTasks["Updating node ${it}"] = { 
+                                updateNodeTasks["Updating node ${serverName}"] = { 
                                     echo "Updating nodes"
-                                        println remote.it
+                                        println remote.serverName
                                         debFileLocation.each { deb ->
                                             ut.remoteExec(remote.serverName, true, "bash -c '[[ -f ${debFileLocationOnNode} ]] && rm -rf ${debFileLocationOnNode} || true'")
                                             println remote.serverName
@@ -229,8 +229,9 @@ node('wavesnode'){
                                         ut.remotePut(remote.serverName, localConfLocation, localConfLocationOnNode)
                                         ut.remoteExec(remote.serverName, true, "chown ${node_service_name}:${node_service_name} ${localConfLocationOnNode}")
                                 }
-                                parallel updateNodeTasks
+                                
                             }
+                            parallel updateNodeTasks
                         } else{
                             org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Updating nodes')
                         }
