@@ -210,8 +210,9 @@ node('wavesnode'){
 
                             }
                             Constants.DEVNET_PERFORMANCE_TEST_NODES.each { serverName -> 
-                                stage('Updating nodes') {
+                                
                                 updateNodeTasks["Updating node ${serverName}"] = { 
+                                    stage('Updating nodes') {
                                     echo "Updating nodes"
                                         println remote.serverName
                                         debFileLocation.each { deb ->
