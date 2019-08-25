@@ -200,16 +200,17 @@ node('wavesnode'){
                             }
 
                             Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
+                                remote.it = [:]
+                                remote.it.host = it
+                                remote.it.name = it
+                                remote.it.allowAnyHosts = true
+                                remote.it.user = userName
+                                remote.it.identityFile = identity
+
+                            }
+                            Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
                                 updateNodeTasks["Updating node ${it}"] = {
-                                    remote.it = [:]
-                                    remote.it.host = it
-                                    remote.it.name = it
-                                    remote.it.allowAnyHosts = true
-                                    remote.it.user = userName
-                                    remote.it.identityFile = identity
-
-                                    println remote.it
-
+                                    
                                     echo "Updating nodes"
                                     debFileLocation.each { deb ->
                                         ut.remoteExec(remote.it, true, "bash -c '[[ -f ${debFileLocationOnNode} ]] && rm -rf ${debFileLocationOnNode} || true'")
