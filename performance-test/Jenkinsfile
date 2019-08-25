@@ -173,10 +173,10 @@ node('wavesnode'){
 
                     echo "Generate generator configs"
 
-                    String applicationConfFileContent = ut.generateSystemdServiceFileText(applicationConfTemplateLocation, applicationTemplateMap)
+                    String applicationConfFileContent = ut.replaceTemplateVars(applicationConfTemplateLocation, applicationTemplateMap)
                     writeFile file: applicationConfLocation, text: applicationConfFileContent
                     sh "cp ${applicationConfLocation} ${artifactsDir}/"
-                    String preconditionsConfFileContent = ut.generateSystemdServiceFileText(preconditionsConfTemplateLocation, preconditionsConfMap)
+                    String preconditionsConfFileContent = ut.replaceTemplateVars(preconditionsConfTemplateLocation, preconditionsConfMap)
                     writeFile file: preconditionsConfLocation, text: preconditionsConfFileContent
                     sh "cp ${preconditionsConfLocation} ${artifactsDir}/"
                 }
@@ -188,7 +188,7 @@ node('wavesnode'){
                     stage('Updating nodes') {
                         if (deploy_new_version) {
                             echo "Generating local.conf"
-                            String localConfFileContent = ut.generateSystemdServiceFileText(localConfTemplateLocation, localCongTemplateMap)
+                            String localConfFileContent = ut.replaceTemplateVars(localConfTemplateLocation, localCongTemplateMap)
                             writeFile file: localConfLocation, text: localConfFileContent
                             sh "cp ${localConfLocation} ${artifactsDir}/"
 
