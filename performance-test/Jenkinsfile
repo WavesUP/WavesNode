@@ -201,11 +201,12 @@ node('wavesnode'){
 
                             Constants.DEVNET_PERFORMANCE_TEST_NODES.each { serverName ->
                                 remote.serverName = [:]
-                                remote.serverName.host = serverName.replaceAll("\\.","-")
-                                remote.serverName.name = serverName.replaceAll("\\.","-")
+                                remote.serverName.host = serverName
+                                remote.serverName.name = serverName
                                 remote.serverName.allowAnyHosts = true
                                 remote.serverName.user = userName
                                 remote.serverName.identityFile = identity
+                                println remote
 
                             }
                             Constants.DEVNET_PERFORMANCE_TEST_NODES.each { serverName -> 
