@@ -168,40 +168,44 @@ node('wavesnode'){
 
                 stage('Checkout') {
                     sh 'env'
-                    step([$class: 'WsCleanup'])
-                    ut.checkout(branch, repo_url)
-                    sh "mkdir ${artifactsDir}"
+                    // step([$class: 'WsCleanup'])
+                    // ut.checkout(branch, repo_url)
+                    // sh "mkdir ${artifactsDir}"
 
-                    echo "Generate generator configs"
+                    // echo "Generate generator configs"
 
-                    String applicationConfFileContent = ut.replaceTemplateVars(applicationConfTemplateLocation, applicationTemplateMap)
-                    writeFile file: applicationConfLocation, text: applicationConfFileContent
-                    sh "cp ${applicationConfLocation} ${artifactsDir}/"
-                    String preconditionsConfFileContent = ut.replaceTemplateVars(preconditionsConfTemplateLocation, preconditionsConfMap)
-                    writeFile file: preconditionsConfLocation, text: preconditionsConfFileContent
-                    sh "cp ${preconditionsConfLocation} ${artifactsDir}/"
+                    // String applicationConfFileContent = ut.replaceTemplateVars(applicationConfTemplateLocation, applicationTemplateMap)
+                    // writeFile file: applicationConfLocation, text: applicationConfFileContent
+                    // sh "cp ${applicationConfLocation} ${artifactsDir}/"
+                    // String preconditionsConfFileContent = ut.replaceTemplateVars(preconditionsConfTemplateLocation, preconditionsConfMap)
+                    // writeFile file: preconditionsConfLocation, text: preconditionsConfFileContent
+                    // sh "cp ${preconditionsConfLocation} ${artifactsDir}/"
                 }
 
                 withCredentials([sshUserPrivateKey(credentialsId: Constants.DEPLOYBOT_CREDS_ID, keyFileVariable: 'identity', passphraseVariable: '', usernameVariable: 'userName')]) {
 
                     stage('Updating nodes') {
                         if (deploy_new_version) {
-                            echo "Generating local.conf"
-                            String localConfFileContent = ut.replaceTemplateVars(localConfTemplateLocation, localCongTemplateMap)
-                            writeFile file: localConfLocation, text: localConfFileContent
-                            sh "cp ${localConfLocation} ${artifactsDir}/"
+                            // echo "Generating local.conf"
+                            // String localConfFileContent = ut.replaceTemplateVars(localConfTemplateLocation, localCongTemplateMap)
+                            // writeFile file: localConfLocation, text: localConfFileContent
+                            // sh "cp ${localConfLocation} ${artifactsDir}/"
 
-                            echo "Building package"
-                            ut.sbt 'clean packageAll'
+                            // echo "Building package"
+                            // ut.sbt 'clean packageAll'
 
-                            debFileLocation = findFiles(glob: '**/*.deb')
-                            debFileLocation.each {
-                                sh "cp ${it.path} ${artifactsDir}/"
-                            }
+                            // debFileLocation = findFiles(glob: '**/*.deb')
+                            // debFileLocation.each {
+                            //     sh "cp ${it.path} ${artifactsDir}/"
+                            // }
 
                             Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
                                 updateNodeTasks["Updating node ${it}"] = {
-                                    remote.it = [ 'host': it, 'name': it, 'allowAnyHosts': true, 'user': userName, 'identityFile': identity]
+                                    remote.it.host = it
+                                    remote.it.name = it
+                                    remote.it.allowAnyHosts = true
+                                    remote.it.user = userName
+                                    remote.it.identityFile = identity
 
                                     echo remote.it
 
