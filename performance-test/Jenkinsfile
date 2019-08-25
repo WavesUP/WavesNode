@@ -233,7 +233,7 @@ node('wavesnode'){
                         }
                     }
                     stage('Data drop') {
-                        Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
+                        Constants.DEVNET_PERFORMANCE_TEST_NODES.each { serverName ->
                             restartNodeTasks["Restarting node ${it}"] = {
                                 
                                 ut.remoteExec(remote["${serverName}"], true, "systemctl stop ${node_service_name} || true")
