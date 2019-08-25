@@ -236,28 +236,29 @@ node('wavesnode'){
                         Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
                             restartNodeTasks["Restarting node ${it}"] = {
                                 
-                                ut.remoteExec(remote.it, true, "systemctl stop ${node_service_name} || true")
+                                ut.remoteExec(remote["${serverName}"], true, "systemctl stop ${node_service_name} || true")
                                 if (data_drop) {
                                     echo "Removing node state"
-                                    ut.remoteExec(remote.it, true, "rm -rf /var/lib/${node_service_name}/{data,peers.dat}")
+                                    ut.remoteExec(remote["${serverName}"], true, "rm -rf /var/lib/${node_service_name}/{data,peers.dat}")
                                 }
                                 if (wallet_drop) {
                                     echo "Removing wallet data"
-                                    ut.remoteExec(remote.it, true, "rm -rf /var/lib/${node_service_name}/wallet")
+                                    ut.remoteExec(remote["${serverName}"], true, "rm -rf /var/lib/${node_service_name}/wallet")
                                 }
                                 if (matcher_data_drop) {
                                     echo "Removing matcher data"
-                                    ut.remoteExec(remote.it, true, "rm -rf /var/lib/${node_service_name}/matcher/data")
+                                    ut.remoteExec(remote["${serverName}"], true, "rm -rf /var/lib/${node_service_name}/matcher/data")
                                 }
-                                ut.remoteExec(remote.it, true, "systemctl restart ${node_service_name}")
+                                ut.remoteExec(remote["${serverName}"], true, "systemctl restart ${node_service_name}")
                             }
+                            parallel restartNodeTasks
                         }
                         if (!(data_drop || wallet_drop || matcher_data_drop)) {
                             org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Data drop')
                         }
                     }
                     
-                    parallel restartNodeTasks
+                    
                 }
             }
 
