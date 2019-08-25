@@ -201,6 +201,7 @@ node('wavesnode'){
 
                             Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
                                 updateNodeTasks["Updating node ${it}"] = {
+                                    remote.it = [:]
                                     remote.it.host = it
                                     remote.it.name = it
                                     remote.it.allowAnyHosts = true
