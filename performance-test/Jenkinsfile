@@ -217,7 +217,7 @@ node('wavesnode'){
                                     ut.remoteExec(remote.it, true, "setfacl -R -m u:${userName}:rwx ${parentDir localConfLocationOnNode}")
                                     ut.remoteExec(remote.it, true, "rm -f ${localConfLocationOnNode} || true")
                                     ut.remotePut(remote.it, localConfLocation, localConfLocationOnNode)
-                                    ut.remoteExecremote.it, true, "chown ${node_service_name}:${node_service_name} ${localConfLocationOnNode}")
+                                    ut.remoteExec(remote.it, true, "chown ${node_service_name}:${node_service_name} ${localConfLocationOnNode}")
                                 }
                             }
                         } else{
