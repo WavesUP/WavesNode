@@ -207,7 +207,7 @@ node('wavesnode'){
 
                                     echo "Updating nodes"
                                     debFileLocation.each { deb ->
-                                        ut.remoteExec(true, "[[ -f ${debFileLocationOnNode} ]] && sudo rm -f ${debFileLocationOnNode} || true")
+                                        ut.remoteExec(true, "bash -c '[[ -f ${debFileLocationOnNode} ]] && rm -rf ${debFileLocationOnNode} || true'")
                                         ut.remotePut(deb.path, '/tmp/' + deb.name)
                                         ut.remoteExec(true, "systemctl stop ${node_service_name} || true")
                                         ut.remoteExec(true, "dpkg --force-confnew -i /tmp/${deb.name}")
