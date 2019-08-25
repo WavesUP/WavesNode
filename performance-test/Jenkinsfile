@@ -9,6 +9,7 @@ def restartNodeTasks = [:]
 def localCongTemplateMap = [:]
 def applicationTemplateMap = [:]
 def preconditionsConfMap = [:]
+def remote = [:]
 def deploy_new_version, data_drop, wallet_drop, matcher_data_drop
 
 def parentDir = { path -> path[0..<path.lastIndexOf('/')] }
@@ -182,8 +183,6 @@ node('wavesnode'){
                 }
 
                 withCredentials([sshUserPrivateKey(credentialsId: Constants.DEPLOYBOT_CREDS_ID, keyFileVariable: 'identity', passphraseVariable: '', usernameVariable: 'userName')]) {
-                    Constants.REMOTE.user = userName
-                    Constants.REMOTE.identityFile = identity
 
                     stage('Updating nodes') {
                         if (deploy_new_version) {
@@ -202,22 +201,23 @@ node('wavesnode'){
 
                             Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
                                 updateNodeTasks["Updating node ${it}"] = {
-                                    Constants.REMOTE.host = it
-                                    Constants.REMOTE.name = it
+                                    remote.it = [ 'host': it, 'name': it, 'allowAnyHosts': true, 'user': userName, 'identityFile': identity]
+
+                                    echo remote.it
 
                                     echo "Updating nodes"
                                     debFileLocation.each { deb ->
-                                        ut.remoteExec(true, "bash -c '[[ -f ${debFileLocationOnNode} ]] && rm -rf ${debFileLocationOnNode} || true'")
-                                        ut.remotePut(deb.path, '/tmp/' + deb.name)
-                                        ut.remoteExec(true, "systemctl stop ${node_service_name} || true")
-                                        ut.remoteExec(true, "dpkg --force-confnew -i /tmp/${deb.name}")
+                                        ut.remoteExec(remote.it, true, "bash -c '[[ -f ${debFileLocationOnNode} ]] && rm -rf ${debFileLocationOnNode} || true'")
+                                        ut.remotePut(remote.it, deb.path, '/tmp/' + deb.name)
+                                        ut.remoteExec(remote.it, true, "systemctl stop ${node_service_name} || true")
+                                        ut.remoteExec(remote.it, true, "dpkg --force-confnew -i /tmp/${deb.name}")
                                     }
 
                                     echo "Updating node configs"
-                                    ut.remoteExec(true, "setfacl -R -m u:${userName}:rwx ${parentDir localConfLocationOnNode}")
-                                    ut.remoteExec(true, "rm -f ${localConfLocationOnNode} || true")
-                                    ut.remotePut(localConfLocation, localConfLocationOnNode)
-                                    ut.remoteExec(true, "chown ${node_service_name}:${node_service_name} ${localConfLocationOnNode}")
+                                    ut.remoteExec(remote.it, true, "setfacl -R -m u:${userName}:rwx ${parentDir localConfLocationOnNode}")
+                                    ut.remoteExec(remote.it, true, "rm -f ${localConfLocationOnNode} || true")
+                                    ut.remotePut(remote.it, localConfLocation, localConfLocationOnNode)
+                                    ut.remoteExecremote.it, true, "chown ${node_service_name}:${node_service_name} ${localConfLocationOnNode}")
                                 }
                             }
                         } else{
@@ -227,23 +227,21 @@ node('wavesnode'){
                     stage('Data drop') {
                         Constants.DEVNET_PERFORMANCE_TEST_NODES.each {
                             restartNodeTasks["Restarting node ${it}"] = {
-                                Constants.REMOTE.host = it
-                                Constants.REMOTE.name = it
                                 
-                                ut.remoteExec(true, "systemctl stop ${node_service_name} || true")
+                                ut.remoteExec(remote.it, true, "systemctl stop ${node_service_name} || true")
                                 if (data_drop) {
                                     echo "Removing node state"
-                                    ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/{data,peers.dat}")
+                                    ut.remoteExec(remote.it, true, "rm -rf /var/lib/${node_service_name}/{data,peers.dat}")
                                 }
                                 if (wallet_drop) {
                                     echo "Removing wallet data"
-                                    ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/wallet")
+                                    ut.remoteExec(remote.it, true, "rm -rf /var/lib/${node_service_name}/wallet")
                                 }
                                 if (matcher_data_drop) {
                                     echo "Removing matcher data"
-                                    ut.remoteExec(true, "rm -rf /var/lib/${node_service_name}/matcher/data")
+                                    ut.remoteExec(remote.it, true, "rm -rf /var/lib/${node_service_name}/matcher/data")
                                 }
-                                ut.remoteExec(true, "systemctl restart ${node_service_name}")
+                                ut.remoteExec(remote.it, true, "systemctl restart ${node_service_name}")
                             }
                         }
                         if (!(data_drop || wallet_drop || matcher_data_drop)) {
