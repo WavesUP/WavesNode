@@ -2,8 +2,8 @@
 waves {
   network {
     port = 6867
-    known-peers = ["52.28.115.7:6867", "3.121.169.0:6867"]
-    declared-address = "52.28.115.7:6867"
+    known-peers = ${known_peers}
+    declared-address = "${declared_address}"
     enable-peers-exchange = no
     enable-blacklisting = no
     node-name = 3

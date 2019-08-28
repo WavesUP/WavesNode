@@ -3,6 +3,7 @@ import devops.waves.*
 @Library('jenkins-shared-lib')
 
 ut = new utils()
+scripts = new scripts()
 def json_parameters = [:]
 def updateNodeTasks = [:]
 def restartNodeTasks = [:]
@@ -10,8 +11,8 @@ def localCongTemplateMap = [:]
 def applicationTemplateMap = [:]
 def preconditionsConfMap = [:]
 def remote = [:]
-def deploy_new_version, data_drop, wallet_drop, matcher_data_drop
-
+def deploy_new_version, data_drop, wallet_drop, matcher_data_drop, run_generator
+def servers = []
 def parentDir = { path -> path[0..<path.lastIndexOf('/')] }
 
 def artifactsDir = 'performance-test/out'
@@ -32,7 +33,10 @@ def node_service_name = 'waves-devnet'
 
 properties([
     parameters([
-        listGitBranches( name: 'branch', branchFilter: 'origin/(.*)',  credentialsId: '', defaultValue: '', listSize: '20', quickFilterEnabled: false, remoteURL: repo_url, selectedValue: 'NONE', sortMode: 'ASCENDING_SMART', type: 'PT_BRANCH'),
+        ut.gitParameterDefinitionObject('branch', 'origin/(.*)', 'DESCENDING_SMART', 'NONE', repo_url, ''),
+        ut.choiceParameterObject('deploymentGroup', scripts.getDeploymentGroups()),
+        ut.cascadeChoiceParameterObject('deploymentServers', scripts.getDeploymentServers(), 'deploymentGroup','PARAMETER_TYPE_CHECK_BOX'),
+        // listGitBranches( name: 'branch', branchFilter: 'origin/(.*)',  credentialsId: '', defaultValue: '', listSize: '20', quickFilterEnabled: false, remoteURL: repo_url, selectedValue: 'NONE', sortMode: 'ASCENDING_SMART', type: 'PT_BRANCH'),
         extendedChoice(bindings: '', description: '', groovyClasspath: '', groovyScript: '''import org.boon.Boon;
 
 def jsonEditorOptions = Boon.fromJson(/{
@@ -42,8 +46,8 @@ def jsonEditorOptions = Boon.fromJson(/{
         disable_array_reorder: true,
         theme: "bootstrap3",
         iconlib: "fontawesome2",
-        schema: {"type": "object", "title": "Pipeline Configuration", "required": [ "actions", "configs", "environment" ], "properties": { "actions": { "propertyOrder": 1, "type": "object", "format": "grid", "required": [ "deploy_new_version", "data_drop", "wallet_drop", "matcher_data_drop", "restart_node" ], "properties": { "deploy_new_version": { "propertyOrder": 1, "title": "Build and deploy new version", "type": "boolean", "options": { "grid_columns": 4 }, "format": "checkbox" }, "data_drop": { "propertyOrder": 2, "title": "Drop node state", "type": "boolean", "options": { "grid_columns": 4 }, "format": "checkbox" }, "wallet_drop": { "propertyOrder": 3, "title": "Drop wallet", "type": "boolean", "options": { "grid_columns": 4 }, "format": "checkbox" }, "matcher_data_drop": { "propertyOrder": 4, "title": "Drop matcher data", "type": "boolean", "options": { "grid_columns": 4 }, "format": "checkbox" }, "restart_node": { "propertyOrder": 5, "title": "Restart node", "type": "boolean", "default": true, "readOnly": true, "options": { "grid_columns": 8 }, "format": "checkbox" } } }, "environment": { "propertyOrder": 2, "type": "object", "title": "Environment", "required": [ "ntp_server" ], "properties": { "ntp_server": { "title": "NTP server", "type": "string", "default": "teamcity.wvservices.com" } } }, "configs": { "propertyOrder": 3, "title": "Configurations", "type": "array", "format": "tabs", "options": { "disable_array_add": true, "disable_array_delete": true }, "items": { "title": "Config", "headerTemplate": "{{self.name}}", "type": "object", "format": "grid", "properties": { "name" : { "title": "config", "type": "string", "readOnly": true, "propertyOrder": 1, "options": { "grid_columns": 4, "hidden": true } }, "generator": { "type": "object", "title": "Generator", "propertyOrder" : 2, "required": [ "chain_id", "accounts", "network_servers" ], "properties": { "chain_id": { "title": "Chain ID", "type": "string", "default": "D", "propertyOrder" : 1 }, "accounts": { "type": "array", "format": "table", "title": "Accounts", "propertyOrder" : 2, "description": "Enter accounts - one per line. Punctuation spaces not required", "items": { "type": "object", "required": [ "account" ], "properties": { "account": { "title": "Account", "type": "string", "default": "DTRDYUFGHDTYFGUVHBDRTYFUGHJ" } } } }, "network_servers": { "type": "array", "format": "table", "title": "Network servers", "propertyOrder" : 3, "description": "Enter network server addresses - one per line. Punctuation not required.", "items": { "type": "object", "required": [ "network_server" ], "properties": { "network_server": { "title": "Network server", "type": "string" } } }, "default": [ { "network_server": "devnet-aws-fr-6.wavesnodes.com" }, { "network_server": "devnet-aws-fr-5.wavesnodes.com" } ] } } }, "worker": { "type": "object", "title": "Worker", "propertyOrder" : 3, "format": "grid", "required": [ "worker_delay", "worker_utx_limit", "worker_working_time" ], "properties": { "worker_delay": { "title": "Worker delay", "type": "string", "default": "1s", "options": { "grid_columns": 4 } }, "worker_utx_limit": { "title": "Worker UTX limit", "type": "string", "default": "5000", "options": { "grid_columns": 4 } }, "worker_working_time": { "title": "Worker working time", "type": "string", "default": "1h", "options": { "grid_columns": 4 } } } }, "probabilities": { "type": "object", "propertyOrder" : 4, "title": "Probabilities", "required": [ "issue_transaction_v2", "transfer_transaction_v2", "reissue_transaction_v2", "burn_transaction_v2", "exchange_transaction_v2", "lease_transaction_v2", "lease_cancel_transaction_v2", "create_alias_transaction_v2", "mass_transfer_transaction", "data_transaction", "sponsor_fee_transaction", "invoke_script_transaction" ], "format": "grid", "properties": { "issue_transaction_v2": { "title": "Issue transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "transfer_transaction_v2": { "title": "Transfer transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "reissue_transaction_v2": { "title": "Reissue transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "burn_transaction_v2": { "title": "Burn transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "exchange_transaction_v2": { "title": "Exchange transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "lease_transaction_v2": { "title": "Lease transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "lease_cancel_transaction_v2": { "title": "Lease cancel transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "create_alias_transaction_v2": { "title": "Create alias transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "mass_transfer_transaction": { "title": "Mass transfer transaction", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "data_transaction": { "title": "Data transaction", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "sponsor_fee_transaction": { "title": "Sponsor fee transaction", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "invoke_script_transaction": { "title": "Invoke script transaction", "type": "string", "default": "0", "options": { "grid_columns": 4 } } } }, "blockchain": { "type": "object", "title": "Blockchain", "propertyOrder" : 5, "required": [ "blockchain_type", "custom_address_scheme_character", "pre_activated_features", "features_supported" ], "properties": { "blockchain_type": { "title": "Blockchain type", "type": "string", "default": "CUSTOM", "propertyOrder" : 1 }, "custom_address_scheme_character": { "title": "Custom address scheme character", "type": "string", "default": "D", "propertyOrder" : 2 }, "pre_activated_features": { "title": "Pre activated features", "type": "string", "description": "without space. Example: {1=0,2=0,3=0,4=0,5=0,6=0,7=0,8=0}", "default": "{1=0,2=0,3=0,4=0,5=0,6=0,7=0,8=0,9=0,10=0,11=0,12=0,13=0}", "propertyOrder" : 3 }, "features_supported": { "title": "Supported features", "type": "string", "description": "without space. Example: [1,2,3,4,5,6,7,8]", "default": "[5,6,7]", "propertyOrder" : 4 } } }, "miner": { "type": "object", "title": "Miner", "propertyOrder" : 6, "required": [ "micro_block_interval", "max_transactions_in_micro_block", "min_micro_block_age" ], "properties": { "micro_block_interval": { "title": "Micro block interval", "type": "string", "default": "2s", "propertyOrder" : 1 }, "max_transactions_in_micro_block": { "title": "MAX transactions in micro block", "type": "string", "default": "200", "propertyOrder" : 2 }, "min_micro_block_age": { "title": "MIN micro block age", "type": "string", "default": "1s", "propertyOrder" : 2 } } }, "preconditions": { "propertyOrder" : 7, "type": "object", "title": "Faucet", "required": [ "faucet", "accounts", "leases", "assets" ], "properties": { "faucet": { "propertyOrder" : 1, "title": "Faucet", "type": "string", "default": "FfPr7UvxLRaDDY37nU1Hj9hCswSG6yg1cXw5ooYcVyg5" }, "accounts": { "propertyOrder" : 2, "title": "Accounts", "type": "array", "format": "grid", "items": { "title": "Account", "format": "grid", "type": "object", "required": [ "seed", "balance", "script_file" ], "properties": { "seed": { "title": "Account seed", "type": "string", "default": "seed1", "options": { "grid_columns": 4 } }, "balance": { "title": "Account balance", "type": "string", "default": "123", "options": { "grid_columns": 4 } }, "script_file": { "title": "Account script file", "type": "string", "default": "script1.ride", "options": { "grid_columns": 4 } } } } }, "leases": { "propertyOrder" : 3, "title": "Leases", "type": "array", "format": "table", "items": { "title": "Lease", "type": "object", "format": "grid", "required": [ "from", "to", "amount" ], "properties": { "from": { "title": "From", "type": "string", "default": "seed1", "options": { "grid_columns": 4 } }, "to": { "title": "To", "type": "string", "default": "address", "options": { "grid_columns": 4 } }, "amount": { "title": "Amount", "type": "string", "default": "123", "options": { "grid_columns": 4 } } } } }, "assets": { "propertyOrder" : 4, "title": "Assets", "type": "array", "format": "grid", "items": { "title": "Asset", "type": "object", "format": "grid", "options": { "grid_columns": 4 }, "required": [ "issuer", "name", "description", "amount", "decimals", "reissuable", "script_file"], "properties": { "issuer": { "title": "Issuer", "type": "string", "default": "issuer", "options": { "grid_columns": 4 } }, "name": { "title": "Name", "type": "string", "default": "Asset#1", "options": { "grid_columns": 4 } }, "description": { "title": "Description", "type": "string", "default": "SomeAsset", "options": { "grid_columns": 4 } }, "amount": { "title": "Amount", "type": "string", "default": "100000000", "options": { "grid_columns": 4 } }, "decimals": { "title": "Dedimals", "type": "string", "default": "8", "options": { "grid_columns": 4 } }, "reissuable": { "title": "Reissuable", "type": "boolean", "format": "checkbox", "default": true, "options": { "grid_columns": 4 } }, "script_file": { "title": "Script File", "type": "string", "default": "123", "options": { "grid_columns": 4 } } } } } } } } } } } },
-        startval: { "actions": { "deploy_new_version": false, "data_drop": false, "wallet_drop": false, "matcher_data_drop": false, "restart_node": true }, "environment": { "ntp_server": "teamcity.wvservices.com" }, "configs": [ { "name": "Generator application.conf", "generator": { "chain_id": "D", "accounts": [ { "account": "DTRDYUFGHDTYFGUVHBDRTYFUGHJ" } ], "network_servers": [ { "network_server": "devnet-aws-fr-6.wavesnodes.com" }, { "network_server": "devnet-aws-fr-5.wavesnodes.com" } ] }, "worker": { "worker_delay": "1s", "worker_utx_limit": "5000", "worker_working_time": "1h" }, "probabilities": { "issue_transaction_v2": "0", "transfer_transaction_v2": "0", "reissue_transaction_v2": "0", "burn_transaction_v2": "0", "exchange_transaction_v2": "0", "lease_transaction_v2": "0", "lease_cancel_transaction_v2": "0", "create_alias_transaction_v2": "0", "mass_transfer_transaction": "0", "data_transaction": "0", "sponsor_fee_transaction": "0", "invoke_script_transaction": "0" } }, { "name": "Node local.conf", "blockchain": { "blockchain_type": "CUSTOM", "custom_address_scheme_character": "D", "pre_activated_features": "{1=0,2=0,3=0,4=0,5=0,6=0,7=0,8=0,9=0,10=0,11=0,12=0,13=0}", "features_supported": "[5,6,7]" }, "miner": { "micro_block_interval": "2s", "max_transactions_in_micro_block": "200", "min_micro_block_age": "1s" } }, { "name": "Generator preconditions.conf", "preconditions": { "faucet": "FfPr7UvxLRaDDY37nU1Hj9hCswSG6yg1cXw5ooYcVyg5", "accounts": [ { "seed": "seed1", "balance": "123", "script_file": "script1.ride" } ], "leases": [ { "from": "seed1", "to": "address", "amount": "123" } ], "assets": [ { "issuer": "issuer", "name": "Asset#1", "description": "SomeAsset", "amount": "100000000", "decimals": "8", "reissuable": true, "script_file": "123" } ] } } ] }
+        schema: {"type": "object", "title": "Pipeline Configuration", "required": [ "actions", "configs", "environment" ], "properties": { "actions": { "propertyOrder": 1, "type": "object", "format": "grid", "required": [ "deploy_new_version", "data_drop", "wallet_drop", "matcher_data_drop", "restart_node", "run_generator" ], "properties": { "deploy_new_version": { "propertyOrder": 1, "title": "Build and deploy new version", "type": "boolean", "options": { "grid_columns": 4 }, "format": "checkbox" }, "data_drop": { "propertyOrder": 2, "title": "Drop node state", "type": "boolean", "options": { "grid_columns": 4 }, "format": "checkbox" }, "wallet_drop": { "propertyOrder": 3, "title": "Drop wallet", "type": "boolean", "options": { "grid_columns": 4 }, "format": "checkbox" }, "matcher_data_drop": { "propertyOrder": 4, "title": "Drop matcher data", "type": "boolean", "options": { "grid_columns": 4 }, "format": "checkbox" }, "restart_node": { "propertyOrder": 5, "title": "Restart node", "type": "boolean", "default": true, "readOnly": true, "options": { "grid_columns": 4 }, "format": "checkbox" }, "run_generator": { "propertyOrder": 6, "title": "Run generator", "type": "boolean", "options": { "grid_columns": 4 }, "format": "checkbox" } } }, "environment": { "propertyOrder": 2, "type": "object", "title": "Environment", "required": [ "ntp_server" ], "properties": { "ntp_server": { "title": "NTP server", "type": "string", "default": "teamcity.wvservices.com" } } }, "configs": { "propertyOrder": 3, "title": "Configurations", "type": "array", "format": "tabs", "options": { "disable_array_add": true, "disable_array_delete": true }, "items": { "title": "Config", "headerTemplate": "{{self.name}}", "type": "object", "format": "grid", "properties": { "name" : { "title": "config", "type": "string", "readOnly": true, "propertyOrder": 1, "options": { "grid_columns": 4, "hidden": true } }, "generator": { "type": "object", "title": "Generator", "propertyOrder" : 2, "required": [ "chain_id", "accounts", "network_servers" ], "properties": { "chain_id": { "title": "Chain ID", "type": "string", "default": "D", "propertyOrder" : 1 }, "accounts": { "type": "array", "format": "table", "title": "Accounts", "propertyOrder" : 2, "description": "Enter accounts - one per line. Punctuation spaces not required", "items": { "type": "object", "required": [ "account" ], "properties": { "account": { "title": "Account", "type": "string", "default": "DTRDYUFGHDTYFGUVHBDRTYFUGHJ" } } } }, "network_servers": { "type": "array", "format": "table", "title": "Network servers", "propertyOrder" : 3, "description": "Enter network server addresses - one per line. Punctuation not required.", "items": { "type": "object", "required": [ "network_server" ], "properties": { "network_server": { "title": "Network server", "type": "string" } } }, "default": [ { "network_server": "devnet-aws-fr-6.wavesnodes.com" }, { "network_server": "devnet-aws-fr-5.wavesnodes.com" } ] } } }, "worker": { "type": "object", "title": "Worker", "propertyOrder" : 3, "format": "grid", "required": [ "worker_delay", "worker_utx_limit", "worker_working_time" ], "properties": { "worker_delay": { "title": "Worker delay", "type": "string", "default": "1s", "options": { "grid_columns": 4 } }, "worker_utx_limit": { "title": "Worker UTX limit", "type": "string", "default": "5000", "options": { "grid_columns": 4 } }, "worker_working_time": { "title": "Worker working time", "type": "string", "default": "1h", "options": { "grid_columns": 4 } } } }, "probabilities": { "type": "object", "propertyOrder" : 4, "title": "Probabilities", "required": [ "issue_transaction_v2", "transfer_transaction_v2", "reissue_transaction_v2", "burn_transaction_v2", "exchange_transaction_v2", "lease_transaction_v2", "lease_cancel_transaction_v2", "create_alias_transaction_v2", "mass_transfer_transaction", "data_transaction", "sponsor_fee_transaction", "invoke_script_transaction" ], "format": "grid", "properties": { "issue_transaction_v2": { "title": "Issue transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "transfer_transaction_v2": { "title": "Transfer transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "reissue_transaction_v2": { "title": "Reissue transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "burn_transaction_v2": { "title": "Burn transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "exchange_transaction_v2": { "title": "Exchange transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "lease_transaction_v2": { "title": "Lease transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "lease_cancel_transaction_v2": { "title": "Lease cancel transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "create_alias_transaction_v2": { "title": "Create alias transaction v2", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "mass_transfer_transaction": { "title": "Mass transfer transaction", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "data_transaction": { "title": "Data transaction", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "sponsor_fee_transaction": { "title": "Sponsor fee transaction", "type": "string", "default": "0", "options": { "grid_columns": 4 } }, "invoke_script_transaction": { "title": "Invoke script transaction", "type": "string", "default": "0", "options": { "grid_columns": 4 } } } }, "blockchain": { "type": "object", "title": "Blockchain", "propertyOrder" : 5, "required": [ "blockchain_type", "custom_address_scheme_character", "pre_activated_features", "features_supported" ], "properties": { "blockchain_type": { "title": "Blockchain type", "type": "string", "default": "CUSTOM", "propertyOrder" : 1 }, "custom_address_scheme_character": { "title": "Custom address scheme character", "type": "string", "default": "D", "propertyOrder" : 2 }, "pre_activated_features": { "title": "Pre activated features", "type": "string", "description": "without space. Example: {1=0,2=0,3=0,4=0,5=0,6=0,7=0,8=0}", "default": "{1=0,2=0,3=0,4=0,5=0,6=0,7=0,8=0,9=0,10=0,11=0,12=0,13=0}", "propertyOrder" : 3 }, "features_supported": { "title": "Supported features", "type": "string", "description": "without space. Example: [1,2,3,4,5,6,7,8]", "default": "[5,6,7]", "propertyOrder" : 4 } } }, "miner": { "type": "object", "title": "Miner", "propertyOrder" : 6, "required": [ "micro_block_interval", "max_transactions_in_micro_block", "min_micro_block_age" ], "properties": { "micro_block_interval": { "title": "Micro block interval", "type": "string", "default": "2s", "propertyOrder" : 1 }, "max_transactions_in_micro_block": { "title": "MAX transactions in micro block", "type": "string", "default": "200", "propertyOrder" : 2 }, "min_micro_block_age": { "title": "MIN micro block age", "type": "string", "default": "1s", "propertyOrder" : 2 } } }, "preconditions": { "propertyOrder" : 7, "type": "object", "title": "Faucet", "required": [ "faucet", "accounts", "leases", "assets" ], "properties": { "faucet": { "propertyOrder" : 1, "title": "Faucet", "type": "string", "default": "FfPr7UvxLRaDDY37nU1Hj9hCswSG6yg1cXw5ooYcVyg5" }, "accounts": { "propertyOrder" : 2, "title": "Accounts", "type": "array", "format": "grid", "items": { "title": "Account", "format": "grid", "type": "object", "required": [ "seed", "balance", "script_file" ], "properties": { "seed": { "title": "Account seed", "type": "string", "default": "seed1", "options": { "grid_columns": 4 } }, "balance": { "title": "Account balance", "type": "string", "default": "123", "options": { "grid_columns": 4 } }, "script_file": { "title": "Account script file", "type": "string", "default": "script1.ride", "options": { "grid_columns": 4 } } } } }, "leases": { "propertyOrder" : 3, "title": "Leases", "type": "array", "format": "table", "items": { "title": "Lease", "type": "object", "format": "grid", "required": [ "from", "to", "amount" ], "properties": { "from": { "title": "From", "type": "string", "default": "seed1", "options": { "grid_columns": 4 } }, "to": { "title": "To", "type": "string", "default": "address", "options": { "grid_columns": 4 } }, "amount": { "title": "Amount", "type": "string", "default": "123", "options": { "grid_columns": 4 } } } } }, "assets": { "propertyOrder" : 4, "title": "Assets", "type": "array", "format": "grid", "items": { "title": "Asset", "type": "object", "format": "grid", "options": { "grid_columns": 4 }, "required": [ "issuer", "name", "description", "amount", "decimals", "reissuable", "script_file"], "properties": { "issuer": { "title": "Issuer", "type": "string", "default": "issuer", "options": { "grid_columns": 4 } }, "name": { "title": "Name", "type": "string", "default": "Asset#1", "options": { "grid_columns": 4 } }, "description": { "title": "Description", "type": "string", "default": "SomeAsset", "options": { "grid_columns": 4 } }, "amount": { "title": "Amount", "type": "string", "default": "100000000", "options": { "grid_columns": 4 } }, "decimals": { "title": "Dedimals", "type": "string", "default": "8", "options": { "grid_columns": 4 } }, "reissuable": { "title": "Reissuable", "type": "boolean", "format": "checkbox", "default": true, "options": { "grid_columns": 4 } }, "script_file": { "title": "Script File", "type": "string", "default": "123", "options": { "grid_columns": 4 } } } } } } } } } } } },
+        startval: { "actions": { "deploy_new_version": false, "data_drop": false, "wallet_drop": false, "matcher_data_drop": false, "restart_node": true, "run_generator": false }, "environment": { "ntp_server": "teamcity.wvservices.com" }, "configs": [ { "name": "Generator application.conf", "generator": { "chain_id": "D", "accounts": [ { "account": "DTRDYUFGHDTYFGUVHBDRTYFUGHJ" } ], "network_servers": [ { "network_server": "devnet-aws-fr-6.wavesnodes.com" }, { "network_server": "devnet-aws-fr-5.wavesnodes.com" } ] }, "worker": { "worker_delay": "1s", "worker_utx_limit": "5000", "worker_working_time": "1h" }, "probabilities": { "issue_transaction_v2": "0", "transfer_transaction_v2": "0", "reissue_transaction_v2": "0", "burn_transaction_v2": "0", "exchange_transaction_v2": "0", "lease_transaction_v2": "0", "lease_cancel_transaction_v2": "0", "create_alias_transaction_v2": "0", "mass_transfer_transaction": "0", "data_transaction": "0", "sponsor_fee_transaction": "0", "invoke_script_transaction": "0" } }, { "name": "Node local.conf", "blockchain": { "blockchain_type": "CUSTOM", "custom_address_scheme_character": "D", "pre_activated_features": "{1=0,2=0,3=0,4=0,5=0,6=0,7=0,8=0,9=0,10=0,11=0,12=0,13=0}", "features_supported": "[5,6,7]" }, "miner": { "micro_block_interval": "2s", "max_transactions_in_micro_block": "200", "min_micro_block_age": "1s" } }, { "name": "Generator preconditions.conf", "preconditions": { "faucet": "FfPr7UvxLRaDDY37nU1Hj9hCswSG6yg1cXw5ooYcVyg5", "accounts": [ { "seed": "seed1", "balance": "123", "script_file": "script1.ride" } ], "leases": [ { "from": "seed1", "to": "address", "amount": "123" } ], "assets": [ { "issuer": "issuer", "name": "Asset#1", "description": "SomeAsset", "amount": "100000000", "decimals": "8", "reissuable": true, "script_file": "123" } ] } } ] }
 }/);
 return jsonEditorOptions;''', multiSelectDelimiter: ',', name: 'parameters', quoteValue: false, saveJSONParameterToFile: false, type: 'PT_JSON', visibleItemCount: 5)])])
 
@@ -99,12 +103,19 @@ stage('Build information'){
     }
     else
     {
+        servers = deploymentServers.split(',').collect{it.toLowerCase()}
+        echo "Parameters are specified:\n" +
+        "branch: ${branch}\n" +              
+        "deploymentGroup: ${deploymentGroup}\n" +
+        "servers: ${servers}\n"
+        
         json_parameters = get_json_objects()
 
         deploy_new_version = json_parameters.actions.deploy_new_version.toBoolean()
         data_drop = json_parameters.actions.data_drop.toBoolean()
         wallet_drop = json_parameters.actions.wallet_drop.toBoolean()
         matcher_data_drop = json_parameters.actions.matcher_data_drop.toBoolean()
+        run_generator = json_parameters.actions.run_generator.toBoolean()
 
         localCongTemplateMap = [
             blockchain_type: json_parameters.configs.blockchain.blockchain_type.join(' '),
@@ -114,6 +125,8 @@ stage('Build information'){
             micro_block_interval: json_parameters.configs.miner.micro_block_interval.join(' '),
             max_transactions_in_micro_block: json_parameters.configs.miner.max_transactions_in_micro_block.join(' '),
             min_micro_block_age: json_parameters.configs.miner.min_micro_block_age.join(' '),
+            declared_address: '',
+            known_peers:'',
             devnet_wallet_seed: '',
             influex_db_user: '',
             influex_db_password: '' ]
@@ -150,6 +163,7 @@ stage('Build information'){
             assets: get_formated_preconditions_string(json_parameters.configs.preconditions.assets.join(' '), 'assets')
         ]
         println "'preconditions.conf' Parameters are specified:\n" + applicationTemplateMap + "\n"
+
     }
 }
 
@@ -184,12 +198,28 @@ node('wavesnode'){
 
                 withCredentials([sshUserPrivateKey(credentialsId: Constants.DEPLOYBOT_CREDS_ID, keyFileVariable: 'identity', passphraseVariable: '', usernameVariable: 'userName')]) {
 
+                    servers.each { serverName -> 
+                        remote["${serverName}"] = [:]
+                        remote["${serverName}"].host = serverName
+                        remote["${serverName}"].name = serverName
+                        remote["${serverName}"].allowAnyHosts = true
+                        remote["${serverName}"].user = userName
+                        remote["${serverName}"].identityFile = identity
+                    }
+
                     stage('Updating nodes') {
                         if (deploy_new_version) {
-                            echo "Generating local.conf"
-                            String localConfFileContent = ut.replaceTemplateVars(localConfTemplateLocation, localCongTemplateMap)
-                            writeFile file: localConfLocation, text: localConfFileContent
-                            sh "cp ${localConfLocation} ${artifactsDir}/"
+                            String localConfFileContent = ''
+                            def all_servers = (deploymentGroup == "dev-core") ? Constants.DEV_CORE_NODES.clone() : Constants.DEVNET3_NODES.clone()
+                            servers.each { serverName -> 
+                                echo "Generating local.conf-${serverName}"
+                                localCongTemplateMap.declared_address = Constants.DEVNET_NODES_IP_ADDRESSES_MAP[serverName]
+                                localCongTemplateMap.known_peers = """[ ${all_servers.findAll{!it.contains("${serverName}")}.collect{ "\"${Constants.DEVNET_NODES_IP_ADDRESSES_MAP[it]}\"" }.join(",")} ]"""
+                                localConfFileContent = ut.replaceTemplateVars(localConfTemplateLocation, localCongTemplateMap)
+                                writeFile file: localConfLocation+"-${serverName}", text: localConfFileContent
+                                sh "cp ${localConfLocation}-${serverName} ${artifactsDir}/"
+                            }
+                            
 
                             echo "Building package"
                             ut.sbt 'clean packageAll'
@@ -199,31 +229,25 @@ node('wavesnode'){
                                 sh "cp ${it.path} ${artifactsDir}/"
                             }
 
-                            Constants.DEVNET_PERFORMANCE_TEST_NODES.each { serverName -> 
-                                remote["${serverName}"] = [:]
-                                remote["${serverName}"].host = serverName
-                                remote["${serverName}"].name = serverName
-                                remote["${serverName}"].allowAnyHosts = true
-                                remote["${serverName}"].user = userName
-                                remote["${serverName}"].identityFile = identity
+                            servers.each { serverName -> 
                                 updateNodeTasks["Updating node ${serverName}"] = { 
                                     echo "Updating nodes"
-                                        println remote.serverName
-                                        debFileLocation.each { deb ->
-                                            ut.remoteExec(remote["${serverName}"], true, "bash -c '[[ -f ${debFileLocationOnNode} ]] && rm -rf ${debFileLocationOnNode} || true'")
-                                            
-                                            ut.remotePut(remote["${serverName}"], deb.path, '/tmp/' + deb.name)
-                                            
-                                            ut.remoteExec(remote["${serverName}"], true, "systemctl stop ${node_service_name} || true")
-                                            
-                                            ut.remoteExec(remote["${serverName}"], true, "dpkg --force-confnew -i /tmp/${deb.name}")
-                                        }
-                                        println remote.serverName
-                                        echo "Updating node configs"
-                                        ut.remoteExec(remote["${serverName}"], true, "setfacl -R -m u:${userName}:rwx ${parentDir localConfLocationOnNode}")
-                                        ut.remoteExec(remote["${serverName}"], true, "rm -f ${localConfLocationOnNode} || true")
-                                        ut.remotePut(remote["${serverName}"], localConfLocation, localConfLocationOnNode)
-                                        ut.remoteExec(remote["${serverName}"], true, "chown ${node_service_name}:${node_service_name} ${localConfLocationOnNode}")
+                                    println remote.serverName
+                                    debFileLocation.each { deb ->
+                                        ut.remoteExec(remote["${serverName}"], true, "bash -c '[[ -f ${debFileLocationOnNode} ]] && rm -rf ${debFileLocationOnNode} || true'")
+                                        
+                                        ut.remotePut(remote["${serverName}"], deb.path, '/tmp/' + deb.name)
+                                        
+                                        ut.remoteExec(remote["${serverName}"], true, "systemctl stop ${node_service_name} || true")
+                                        
+                                        ut.remoteExec(remote["${serverName}"], true, "dpkg --force-confnew -i /tmp/${deb.name}")
+                                    }
+                                    println remote.serverName
+                                    echo "Updating node configs"
+                                    ut.remoteExec(remote["${serverName}"], true, "setfacl -R -m u:${userName}:rwx ${parentDir localConfLocationOnNode}")
+                                    ut.remoteExec(remote["${serverName}"], true, "rm -f ${localConfLocationOnNode} || true")
+                                    ut.remotePut(remote["${serverName}"], localConfLocation+"-${serverName}", localConfLocationOnNode)
+                                    ut.remoteExec(remote["${serverName}"], true, "chown ${node_service_name}:${node_service_name} ${localConfLocationOnNode}")
                                 }
                                 
                             }
@@ -233,8 +257,8 @@ node('wavesnode'){
                         }
                     }
                     stage('Data drop') {
-                        Constants.DEVNET_PERFORMANCE_TEST_NODES.each { serverName ->
-                            restartNodeTasks["Restarting node ${it}"] = {
+                        servers.each { serverName ->
+                            restartNodeTasks["Restarting node ${serverName}"] = {
                                 
                                 ut.remoteExec(remote["${serverName}"], true, "systemctl stop ${node_service_name} || true")
                                 if (data_drop) {
@@ -257,14 +281,18 @@ node('wavesnode'){
                             org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Data drop')
                         }
                     }
-                    
-                    
                 }
             }
 
-//            stage('Run generator') {
-//                ut.sbt "node-generator/run"
-//            }
+            stage('Run generator') {
+                if (run_generator){
+                    sh "sleep 300"
+                    ut.sbt "node-generator/run"
+                }
+                else{
+                org.jenkinsci.plugins.pipeline.modeldefinition.Utils.markStageSkippedForConditional('Run generator')
+                }
+            }
         }
         catch (err) {
             currentBuild.result = Constants.PIPELINE_FAILURE
