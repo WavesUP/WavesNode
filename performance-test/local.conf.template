@@ -6,7 +6,7 @@ waves {
     declared-address = "${declared_address}"
     enable-peers-exchange = no
     enable-blacklisting = no
-    node-name = 3
+    node-name = ${host_id}
     max-inbound-connections = 70
     max-outbound-connections = 70
     traffic-logger {
@@ -23,6 +23,7 @@ waves {
   }
 
   miner {
+    enable = ${node_miner}
     micro-block-interval = ${micro_block_interval}
     max-transactions-in-key-block = 0
     max-transactions-in-micro-block = ${max_transactions_in_micro_block}
@@ -50,7 +51,7 @@ waves {
 
 kamon {
   enable = yes
-  environment.host = 3
+  environment.host = ${host_id}
   influxdb {
     hostname = 127.0.0.1
     port = 8086
@@ -69,7 +70,7 @@ kamon {
 
 metrics {
   enable = yes
-  node-id = 3
+  node-id = ${host_id}
 
   influx-db {
     username = "${influex_db_user}"
