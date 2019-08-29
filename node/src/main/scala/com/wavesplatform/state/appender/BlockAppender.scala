@@ -46,6 +46,7 @@ object BlockAppender extends ScorexLogging {
             peerDatabase: PeerDatabase,
             miner: Miner,
             scheduler: Scheduler)(ch: Channel, newBlock: Block): Task[Unit] = {
+    log.info(s"APPENDING BLOCK: ${newBlock.uniqueId.base58}")
     BlockStats.received(newBlock, BlockStats.Source.Broadcast, ch)
     metrics.blockReceivingLag.safeRecord(System.currentTimeMillis() - newBlock.timestamp)
 
