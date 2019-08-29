@@ -23,6 +23,7 @@ waves {
   }
 
   miner {
+    enable = ${node_miner}
     micro-block-interval = ${micro_block_interval}
     max-transactions-in-key-block = 0
     max-transactions-in-micro-block = ${max_transactions_in_micro_block}

@@ -128,11 +128,11 @@ stage('Build information'){
             declared_address: '',
             known_peers:'',
             host_id: '',
+            node_miner: '',
             devnet_wallet_seed: '',
             influex_db_user: '',
-            influex_db_password: '' ]
+            influex_db_password: '']
         println "'local.conf' parameters are specified:\n" + localCongTemplateMap + "\n"
-        localCongTemplateMap.devnet_wallet_seed = Constants.DEVNET_WALLET_SEED
         localCongTemplateMap.influex_db_user = Constants.INFLUEX_DB_USER
         localCongTemplateMap.influex_db_password = Constants.INFLUEX_DB_PASSWORD
 
@@ -214,9 +214,11 @@ node('wavesnode'){
                             def all_servers = (deploymentGroup == "dev-core") ? Constants.DEV_CORE_NODES.clone() : Constants.DEVNET3_NODES.clone()
                             servers.each { serverName -> 
                                 echo "Generating local.conf-${serverName}"
-                                localCongTemplateMap.declared_address = Constants.DEVNET_NODES_IP_ADDRESSES_MAP[serverName]
+                                localCongTemplateMap.declared_address = Constants.DEVNET_NODES_IP_ADDRESSES_MAP[serverName] + ':6867'
                                 localCongTemplateMap.host_id = Constants.DEVNET_NODES_ID_MAP[serverName]
-                                localCongTemplateMap.known_peers = """[ ${all_servers.findAll{!it.contains("${serverName}")}.collect{ "\"${Constants.DEVNET_NODES_IP_ADDRESSES_MAP[it]}\"" }.join(",")} ]"""
+                                localCongTemplateMap.node_miner = Constants.DEVNET_NODES_MINER[serverName]
+                                localCongTemplateMap.devnet_wallet_seed = Constants.DEVNET_NODES_WALLET_SEEDS[serverName]
+                                localCongTemplateMap.known_peers = """[ ${all_servers.findAll{!it.contains("${serverName}")}.collect{ "\"${Constants.DEVNET_NODES_IP_ADDRESSES_MAP[it]}:6867\"" }.join(",")} ]"""
                                 localConfFileContent = ut.replaceTemplateVars(localConfTemplateLocation, localCongTemplateMap)
                                 writeFile file: localConfLocation+"-${serverName}", text: localConfFileContent
                                 sh "cp ${localConfLocation}-${serverName} ${artifactsDir}/"
