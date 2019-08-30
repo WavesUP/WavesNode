@@ -124,114 +124,126 @@ class BlockchainUpdaterImpl(private val blockchain: LevelDBWriter,
     }
   }
 
-  override def processBlock(block: Block, verify: Boolean = true): Either[ValidationError, Option[DiscardedTransactions]] = writeLock {
-    val height                             = blockchain.height
-    val notImplementedFeatures: Set[Short] = blockchain.activatedFeaturesAt(height).diff(BlockchainFeatures.Implemented)
+  override def processBlock(block: Block, verify: Boolean = true): Either[ValidationError, Option[DiscardedTransactions]] = {
+    log.info(s"APPENDING BLOCK - WAIT LOCK: ${block.uniqueId.base58}")
+    writeLock {
+      log.info(s"APPENDING BLOCK - START APPEND: ${block.uniqueId.base58}")
+      val height                             = blockchain.height
+      val notImplementedFeatures: Set[Short] = blockchain.activatedFeaturesAt(height).diff(BlockchainFeatures.Implemented)
 
-    Either
-      .cond(
-        !wavesSettings.featuresSettings.autoShutdownOnUnsupportedFeature || notImplementedFeatures.isEmpty,
-        (),
-        GenericError(s"UNIMPLEMENTED ${displayFeatures(notImplementedFeatures)} ACTIVATED ON BLOCKCHAIN, UPDATE THE NODE IMMEDIATELY")
-      )
-      .flatMap[ValidationError, Option[DiscardedTransactions]](_ =>
-        (ngState match {
-          case None =>
-            blockchain.lastBlockId match {
-              case Some(uniqueId) if uniqueId != block.reference =>
-                val logDetails = s"The referenced block(${block.reference})" +
-                  s" ${if (blockchain.contains(block.reference)) "exits, it's not last persisted" else "doesn't exist"}"
-                Left(BlockAppendError(s"References incorrect or non-existing block: " + logDetails, block))
-              case lastBlockId =>
-                val height            = lastBlockId.fold(0)(blockchain.unsafeHeightOf)
-                val miningConstraints = MiningConstraints(blockchain, height)
-                BlockDiffer
-                  .fromBlock(blockchain, blockchain.lastBlock, block, miningConstraints.total, verify)
-                  .map(r => Some((r, Seq.empty[Transaction])))
-            }
-          case Some(ng) =>
-            if (ng.base.reference == block.reference) {
-              if (block.blockScore() > ng.base.blockScore()) {
-                val height            = blockchain.unsafeHeightOf(ng.base.reference)
-                val miningConstraints = MiningConstraints(blockchain, height)
-
-                BlockDiffer
-                  .fromBlock(blockchain, blockchain.lastBlock, block, miningConstraints.total, verify)
-                  .map { r =>
-                    log.trace(
-                      s"Better liquid block(score=${block.blockScore()}) received and applied instead of existing(score=${ng.base.blockScore()})")
-                    Some((r, ng.transactions))
-                  }
-              } else if (areVersionsOfSameBlock(block, ng.base)) {
-                if (block.transactionData.lengthCompare(ng.transactions.size) <= 0) {
-                  log.trace(s"Existing liquid block is better than new one, discarding $block")
-                  Right(None)
-                } else {
-                  log.trace(s"New liquid block is better version of existing, swapping")
-                  val height            = blockchain.unsafeHeightOf(ng.base.reference)
+      Either
+        .cond(
+          !wavesSettings.featuresSettings.autoShutdownOnUnsupportedFeature || notImplementedFeatures.isEmpty,
+          (),
+          GenericError(s"UNIMPLEMENTED ${displayFeatures(notImplementedFeatures)} ACTIVATED ON BLOCKCHAIN, UPDATE THE NODE IMMEDIATELY")
+        )
+        .flatMap[ValidationError, Option[DiscardedTransactions]](_ =>
+          (ngState match {
+            case None =>
+              blockchain.lastBlockId match {
+                case Some(uniqueId) if uniqueId != block.reference =>
+                  val logDetails = s"The referenced block(${block.reference})" +
+                    s" ${if (blockchain.contains(block.reference)) "exits, it's not last persisted" else "doesn't exist"}"
+                  Left(BlockAppendError(s"References incorrect or non-existing block: " + logDetails, block))
+                case lastBlockId =>
+                  val height            = lastBlockId.fold(0)(blockchain.unsafeHeightOf)
                   val miningConstraints = MiningConstraints(blockchain, height)
-
+                  log.info(s"APPENDING BLOCK - CALC DIFF: ${block.uniqueId.base58}")
                   BlockDiffer
                     .fromBlock(blockchain, blockchain.lastBlock, block, miningConstraints.total, verify)
                     .map(r => Some((r, Seq.empty[Transaction])))
-                }
-              } else
-                Left(BlockAppendError(
-                  s"Competitors liquid block $block(score=${block.blockScore()}) is not better than existing (ng.base ${ng.base}(score=${ng.base.blockScore()}))",
-                  block))
-            } else
-              metrics.forgeBlockTimeStats.measureSuccessful(ng.totalDiffOf(block.reference)) match {
-                case None => Left(BlockAppendError(s"References incorrect or non-existing block", block))
-                case Some((referencedForgedBlock, referencedLiquidDiff, carry, totalFee, discarded)) =>
-                  if (!verify || referencedForgedBlock.signaturesValid().isRight) {
-                    if (discarded.nonEmpty) {
-                      metrics.microBlockForkStats.increment()
-                      metrics.microBlockForkHeightStats.record(discarded.size)
-                    }
+              }
+            case Some(ng) =>
+              if (ng.base.reference == block.reference) {
+                if (block.blockScore() > ng.base.blockScore()) {
+                  val height            = blockchain.unsafeHeightOf(ng.base.reference)
+                  val miningConstraints = MiningConstraints(blockchain, height)
 
-                    val constraint: MiningConstraint = {
-                      val height            = blockchain.heightOf(referencedForgedBlock.reference).getOrElse(0)
-                      val miningConstraints = MiningConstraints(blockchain, height)
-                      miningConstraints.total
+                  log.info(s"APPENDING BLOCK - CALC DIFF FOR NEW LIQUID: ${block.uniqueId.base58}")
+                  BlockDiffer
+                    .fromBlock(blockchain, blockchain.lastBlock, block, miningConstraints.total, verify)
+                    .map { r =>
+                      log.trace(
+                        s"Better liquid block(score=${block.blockScore()}) received and applied instead of existing(score=${ng.base.blockScore()})")
+                      Some((r, ng.transactions))
                     }
-
-                    val diff = BlockDiffer
-                      .fromBlock(
-                        CompositeBlockchain(blockchain, Some(referencedLiquidDiff), Some(referencedForgedBlock), carry),
-                        Some(referencedForgedBlock),
-                        block,
-                        constraint,
-                        verify
-                      )
-
-                    diff.map { hardenedDiff =>
-                      blockchain.append(referencedLiquidDiff, carry, totalFee, referencedForgedBlock)
-                      TxsInBlockchainStats.record(ng.transactions.size)
-                      Some((hardenedDiff, discarded.flatMap(_.transactionData)))
-                    }
+                } else if (areVersionsOfSameBlock(block, ng.base)) {
+                  if (block.transactionData.lengthCompare(ng.transactions.size) <= 0) {
+                    log.trace(s"Existing liquid block is better than new one, discarding $block")
+                    Right(None)
                   } else {
-                    val errorText = s"Forged block has invalid signature: base: ${ng.base}, requested reference: ${block.reference}"
-                    log.error(errorText)
-                    Left(BlockAppendError(errorText, block))
-                  }
-              }
-        }).map {
-          _ map {
-            case (BlockDiffer.Result(newBlockDiff, carry, totalFee, updatedTotalConstraint), discarded) =>
-              val height = blockchain.height + 1
-              restTotalConstraint = updatedTotalConstraint
-              val prevNgState = ngState
-              ngState = Some(new NgState(block, newBlockDiff, carry, totalFee, featuresApprovedWithBlock(block)))
-              notifyChangedSpendable(prevNgState, ngState)
-              publishLastBlockInfo()
+                    log.trace(s"New liquid block is better version of existing, swapping")
+                    val height            = blockchain.unsafeHeightOf(ng.base.reference)
+                    val miningConstraints = MiningConstraints(blockchain, height)
 
-              if ((block.timestamp > time
-                    .getTimestamp() - wavesSettings.minerSettings.intervalAfterLastBlockThenGenerationIsAllowed.toMillis) || (height % 100 == 0)) {
-                log.info(s"New height: $height")
+                    log.info(s"APPENDING BLOCK - CALC DIFF FOR SWAP: ${block.uniqueId.base58}")
+                    BlockDiffer
+                      .fromBlock(blockchain, blockchain.lastBlock, block, miningConstraints.total, verify)
+                      .map(r => Some((r, Seq.empty[Transaction])))
+                  }
+                } else
+                  Left(BlockAppendError(
+                    s"Competitors liquid block $block(score=${block.blockScore()}) is not better than existing (ng.base ${ng.base}(score=${ng.base.blockScore()}))",
+                    block))
+              } else {
+                log.info(s"APPENDING BLOCK - TOTAL DIFF CALC: ${block.uniqueId.base58}")
+                metrics.forgeBlockTimeStats.measureSuccessful(ng.totalDiffOf(block.reference)) match {
+                  case None => Left(BlockAppendError(s"References incorrect or non-existing block", block))
+                  case Some((referencedForgedBlock, referencedLiquidDiff, carry, totalFee, discarded)) =>
+                    if (!verify || referencedForgedBlock.signaturesValid().isRight) {
+                      if (discarded.nonEmpty) {
+                        metrics.microBlockForkStats.increment()
+                        metrics.microBlockForkHeightStats.record(discarded.size)
+                      }
+
+                      val constraint: MiningConstraint = {
+                        val height            = blockchain.heightOf(referencedForgedBlock.reference).getOrElse(0)
+                        val miningConstraints = MiningConstraints(blockchain, height)
+                        miningConstraints.total
+                      }
+
+                      log.info(s"APPENDING BLOCK - CALC DIFF WITH LIQUID: ${block.uniqueId.base58}")
+                      val diff = BlockDiffer
+                        .fromBlock(
+                          CompositeBlockchain(blockchain, Some(referencedLiquidDiff), Some(referencedForgedBlock), carry),
+                          Some(referencedForgedBlock),
+                          block,
+                          constraint,
+                          verify
+                        )
+
+                      log.info(s"APPENDING BLOCK - DIFF APPEND: ${block.uniqueId.base58}")
+                      diff.map { hardenedDiff =>
+                        blockchain.append(referencedLiquidDiff, carry, totalFee, referencedForgedBlock)
+                        TxsInBlockchainStats.record(ng.transactions.size)
+                        Some((hardenedDiff, discarded.flatMap(_.transactionData)))
+                      }
+                    } else {
+                      val errorText = s"Forged block has invalid signature: base: ${ng.base}, requested reference: ${block.reference}"
+                      log.error(errorText)
+                      Left(BlockAppendError(errorText, block))
+                    }
+                }
               }
-              discarded
-          }
-      })
+          }).map {
+            _ map {
+              case (BlockDiffer.Result(newBlockDiff, carry, totalFee, updatedTotalConstraint), discarded) =>
+                val height = blockchain.height + 1
+                restTotalConstraint = updatedTotalConstraint
+                val prevNgState = ngState
+                ngState = Some(new NgState(block, newBlockDiff, carry, totalFee, featuresApprovedWithBlock(block)))
+                log.info(s"APPENDING BLOCK - NOTIFY CHANGED: ${block.uniqueId.base58}")
+                notifyChangedSpendable(prevNgState, ngState)
+                publishLastBlockInfo()
+
+                if ((block.timestamp > time
+                  .getTimestamp() - wavesSettings.minerSettings.intervalAfterLastBlockThenGenerationIsAllowed.toMillis) || (height % 100 == 0)) {
+                  log.info(s"New height: $height")
+                }
+                discarded
+            }
+          })
+    }
   }
 
   override def removeAfter(blockId: ByteStr): Either[ValidationError, Seq[Block]] = writeLock {

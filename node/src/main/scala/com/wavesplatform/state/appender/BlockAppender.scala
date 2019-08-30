@@ -51,6 +51,7 @@ object BlockAppender extends ScorexLogging {
     metrics.blockReceivingLag.safeRecord(System.currentTimeMillis() - newBlock.timestamp)
 
     (for {
+      _                <- EitherT.liftF(Task.delay(log.info(s"APPENDING - SIGVERIFY: ${newBlock.uniqueId.base58}")))
       _                <- EitherT(Task(metrics.blockSignaturesValidation.measureSuccessful(newBlock.signaturesValid())))
       validApplication <- EitherT(apply(blockchainUpdater, time, utxStorage, pos, scheduler)(newBlock))
     } yield validApplication).value.map {

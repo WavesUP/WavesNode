@@ -57,21 +57,28 @@ package object appender extends ScorexLogging {
                                     time: Time,
                                     verify: Boolean)(block: Block): Either[ValidationError, Option[Int]] = {
     val append: Block => Either[ValidationError, Option[Int]] =
-      if (verify) validateAndAppendBlock(blockchainUpdater, utxStorage, pos, time)
-      else appendBlock(blockchainUpdater, utxStorage, verify = false)
+      if (verify) {
+        log.info(s"APPENDING BLOCK - VALIDATE_APPEND: ${block.uniqueId.base58}")
+        validateAndAppendBlock(blockchainUpdater, utxStorage, pos, time)
+      } else {
+        log.info(s"APPENDING BLOCK - JUST_APPEND: ${block.uniqueId.base58}")
+        appendBlock(blockchainUpdater, utxStorage, verify = false)
+      }
     append(block)
   }
 
   private[appender] def validateAndAppendBlock(blockchainUpdater: BlockchainUpdater with Blockchain,
                                                utxStorage: UtxPoolImpl,
                                                pos: PoSSelector,
-                                               time: Time)(block: Block): Either[ValidationError, Option[Int]] =
+                                               time: Time)(block: Block): Either[ValidationError, Option[Int]] = {
+    log.info(s"APPENDING BLOCK - CHECK SCRIPTED: ${block.uniqueId.base58}")
     for {
       _ <- Either.cond(
         !blockchainUpdater.hasScript(block.sender),
         (),
         BlockAppendError(s"Account(${block.sender.toAddress}) is scripted are therefore not allowed to forge blocks", block)
       )
+      _ = log.info(s"APPENDING BLOCK - CHECK CONSENSUS: ${block.uniqueId}")
       _ <- blockConsensusValidation(blockchainUpdater, pos, time.correctedTime(), block) { (height, parent) =>
         val balance = blockchainUpdater.generatingBalance(block.sender, parent)
         Either.cond(
@@ -80,13 +87,17 @@ package object appender extends ScorexLogging {
           s"generator's effective balance $balance is less that required for generation"
         )
       }
+      _ = log.info(s"APPENDING BLOCK - APPEND: ${block.uniqueId}")
       baseHeight <- appendBlock(blockchainUpdater, utxStorage, verify = true)(block)
     } yield baseHeight
+  }
 
   private def appendBlock(blockchainUpdater: BlockchainUpdater with Blockchain, utxStorage: UtxPoolImpl, verify: Boolean)(
       block: Block): Either[ValidationError, Option[Int]] =
     metrics.appendBlock.measureSuccessful(blockchainUpdater.processBlock(block, verify)).map { maybeDiscardedTxs =>
+      log.info(s"APPENDING BLOCK - REMOVE FROM UTX: ${block.uniqueId.base58}")
       metrics.utxRemoveAll.measure(utxStorage.removeAll(block.transactionData))
+      log.info(s"APPENDING BLOCK - RETURN DISCARDED: ${block.uniqueId.base58}")
       maybeDiscardedTxs.map { discarded =>
         metrics.utxDiscardedPut.measure(utxStorage.addAndCleanup(discarded))
         blockchainUpdater.height
