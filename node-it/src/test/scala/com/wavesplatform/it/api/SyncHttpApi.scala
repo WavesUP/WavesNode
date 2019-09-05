@@ -4,9 +4,10 @@ import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
 
+import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes.BadRequest
 import com.wavesplatform.account.{AddressOrAlias, AddressScheme, KeyPair}
-import com.wavesplatform.api.http.AddressApiRoute
+import com.wavesplatform.api.http.{AddressApiRoute, ApiError}
 import com.wavesplatform.api.http.assets.{SignedIssueV1Request, SignedIssueV2Request}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2
@@ -38,25 +39,52 @@ object SyncHttpApi extends Assertions {
   case class ErrorMessage(error: Int, message: String)
   implicit val errorMessageFormat: Format[ErrorMessage] = Json.format
 
-  def assertBadRequest[R](f: => R, expectedStatusCode: Int = 400): Assertion = Try(f) match {
-    case Failure(UnexpectedStatusCodeException(_, _, statusCode, _)) => Assertions.assert(statusCode == expectedStatusCode)
-    case Failure(e)                                                  => Assertions.fail(e)
-    case _                                                           => Assertions.fail("Expecting bad request")
-  }
+//  def assertBadRequest[R](f: => R, expectedStatusCode: Int = 400): Assertion = Try(f) match {
+//    case Failure(UnexpectedStatusCodeException(_, _, statusCode, _)) => Assertions.assert(statusCode == expectedStatusCode)
+//    case Failure(e)                                                  => Assertions.fail(e)
+//    case _                                                           => Assertions.fail("Expecting bad request")
+//  }
+//
+//  def assertBadRequestAndResponse[R](f: => R, errorRegex: String): Assertion = Try(f) match {
+//    case Failure(UnexpectedStatusCodeException(_, _, statusCode, responseBody)) =>
+//      Assertions.assert(statusCode == BadRequest.intValue && responseBody.replace("\n", "").matches(s".*$errorRegex.*"),
+//                        s"\nexpected '$errorRegex'\nactual '$responseBody'")
+//    case Failure(e) => Assertions.fail(e)
+//    case _          => Assertions.fail("Expecting bad request")
+//  }
+//
+//  def assertBadRequestAndMessage[R](f: => R, errorMessage: String, expectedStatusCode: Int = BadRequest.intValue): Assertion = Try(f) match {
+//    case Failure(UnexpectedStatusCodeException(_, _, statusCode, responseBody)) =>
+//      Assertions.assert(statusCode == expectedStatusCode && parse(responseBody).as[ErrorMessage].message.contains(errorMessage))
+//    case Failure(e) => Assertions.fail(e)
+//    case Success(s) => Assertions.fail(s"Expecting bad request but handle $s")
+//  }
 
-  def assertBadRequestAndResponse[R](f: => R, errorRegex: String): Assertion = Try(f) match {
+  def assertApiError[R <: ApiError](f: => R, error: ApiError): Assertion = Try(f) match {
     case Failure(UnexpectedStatusCodeException(_, _, statusCode, responseBody)) =>
-      Assertions.assert(statusCode == BadRequest.intValue && responseBody.replace("\n", "").matches(s".*$errorRegex.*"),
-                        s"\nexpected '$errorRegex'\nactual '$responseBody'")
+      Assertions.assert(
+        statusCode == error.code.intValue()
+          && parse(responseBody).as[ErrorMessage].message.contains(error.message)
+          && parse(responseBody).as[ErrorMessage].error.equals(error.id))
     case Failure(e) => Assertions.fail(e)
-    case _          => Assertions.fail("Expecting bad request")
+    case Success(s) => Assertions.fail(s"Expecting Api error but handle: $s")
   }
 
-  def assertBadRequestAndMessage[R](f: => R, errorMessage: String, expectedStatusCode: Int = BadRequest.intValue): Assertion = Try(f) match {
+  def assertUnexpectedStatusCode[R](f: => R,
+                               errorId: Option[Int] = None,
+                               errorMessage: Option[String] = None,
+                               expectedStatusCode: Int = BadRequest.intValue): Assertion = Try(f) match {
+
     case Failure(UnexpectedStatusCodeException(_, _, statusCode, responseBody)) =>
-      Assertions.assert(statusCode == expectedStatusCode && parse(responseBody).as[ErrorMessage].message.contains(errorMessage))
+      Assertions.assert(statusCode == expectedStatusCode)
+      require(errorId.isDefined)
+
+        Assertions.assert(parse(responseBody).as[ErrorMessage].error.equals(errorId.get))
+      require(errorMessage.isDefined)
+        Assertions.assert(parse(responseBody).as[ErrorMessage].message.contains(errorMessage.get))
     case Failure(e) => Assertions.fail(e)
     case Success(s) => Assertions.fail(s"Expecting bad request but handle $s")
+
   }
 
   val RequestAwaitTime: FiniteDuration = 50.seconds
@@ -237,6 +265,9 @@ object SyncHttpApi extends Assertions {
 
     def aliasByAddress(targetAddress: String): Seq[String] =
       sync(async(n).aliasByAddress(targetAddress))
+
+    def addressByAlias(targetAlias: String): String =
+      sync(async(n).addressByAlias(targetAlias)).address
 
     def broadcastTransfer(source: KeyPair,
                           recipient: String,
