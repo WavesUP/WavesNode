@@ -6,7 +6,7 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2
 import com.wavesplatform.state._
 import com.wavesplatform.state.extensions.Distributions
-import com.wavesplatform.transaction.{BlockchainUpdater, Transaction}
+import com.wavesplatform.transaction.{Asset, BlockchainUpdater, Transaction}
 import monix.execution.Scheduler.Implicits.global
 
 import scala.concurrent.duration.Duration
@@ -27,4 +27,9 @@ case class Domain(blockchainUpdater: BlockchainUpdater with NG) {
     blockchainUpdater.addressTransactionsObservable(address, Set.empty).take(128).toListL.runSyncUnsafe(Duration.Inf)
 
   def carryFee = blockchainUpdater.carryFee
+
+  def wavesBalance(address: Address): Long = blockchainUpdater.balance(address)
+
+  def assetBalance(address: Address, assetId: ByteStr): Long = assetBalance(address, Asset.IssuedAsset(assetId))
+  def assetBalance(address: Address, asset: Asset.IssuedAsset): Long = blockchainUpdater.balance(address, asset)
 }

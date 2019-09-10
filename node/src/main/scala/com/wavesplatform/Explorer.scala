@@ -4,7 +4,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.util
 
-import com.google.common.primitives.Shorts
+import com.google.common.primitives.{Longs, Shorts}
 import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.{Base58, Base64, EitherExt2}
@@ -276,6 +276,17 @@ object Explorer extends ScorexLogging {
           portfolio.assets.toSeq.sortBy(_._1.toString) foreach {
             case (assetId, balance) => log.info(s"$assetId : $balance")
           }
+
+        case "AWB" =>
+          log.info(s"Collecting all balances")
+          val m = new util.HashMap[ByteStr, Long]()
+          db.iterateOver(6.toShort) { e =>
+            val id = ByteStr(e.getKey.drop(6))
+            m.put(id, Longs.fromByteArray(e.getValue))
+          }
+          var totalBalance = 0L
+          m.forEach((_, b) => totalBalance += b)
+          log.info(s"Total waves amount: $totalBalance + ${reader.carryFee} = ${totalBalance + reader.carryFee}")
 
         case "APS" =>
           val addrs = mutable.Set[Address]()
