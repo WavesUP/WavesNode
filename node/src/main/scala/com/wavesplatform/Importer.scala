@@ -5,6 +5,7 @@ import java.net.URL
 
 import com.google.common.primitives.Ints
 import com.wavesplatform.Exporter.Formats
+import com.wavesplatform.account.Address
 import com.wavesplatform.block.Block
 import com.wavesplatform.consensus.PoSSelector
 import com.wavesplatform.db.openDB
