@@ -1,6 +1,7 @@
 package com.wavesplatform
 
 import java.io._
+import java.net.URL
 
 import com.google.common.primitives.Ints
 import com.wavesplatform.Exporter.Formats
@@ -34,7 +35,11 @@ object Importer extends ScorexLogging {
         val time = new NTP(settings.ntpServer)
         log.info(s"Loading file '$blockchainFile'")
 
-        Try(new FileInputStream(blockchainFile)) match {
+        def inputStream() =
+          if (blockchainFile.startsWith("http://") || blockchainFile.startsWith("https://")) new URL(blockchainFile).openStream()
+          else new FileInputStream(blockchainFile)
+
+        Try(inputStream()) match {
           case Success(inputStream) =>
             val db                = openDB(settings.dbSettings.directory)
             val blockchainUpdater = StorageFactory(settings, db, time, Observer.empty(UncaughtExceptionReporter.LogExceptionsToStandardErr))
@@ -47,7 +52,7 @@ object Importer extends ScorexLogging {
             val lenBytes      = new Array[Byte](Ints.BYTES)
             val start         = System.nanoTime()
             var counter       = 0
-            val startHeight = blockchainUpdater.height
+            val startHeight   = blockchainUpdater.height
             var blocksToSkip  = startHeight - 1
             val blocksToApply = importHeight - startHeight + 1
 
@@ -109,7 +114,7 @@ object Importer extends ScorexLogging {
   }
 
   private[this] final case class ImportOptions(configFile: File = new File("waves-testnet.conf"),
-                                               blockchainFile: File = new File("blockchain"),
+                                               blockchainFile: String = "blockchain",
                                                importHeight: Int = Int.MaxValue,
                                                format: String = Formats.Binary,
                                                verify: Boolean = true)
@@ -126,9 +131,9 @@ object Importer extends ScorexLogging {
       opt[File]('c', "config")
         .text("Config file name")
         .action((f, c) => c.copy(configFile = f)),
-      opt[File]('i', "input-file")
+      opt[String]('i', "input-file")
         .required()
-        .text("Blockchain data file name")
+        .text("Blockchain data file name/URL")
         .action((f, c) => c.copy(blockchainFile = f)),
       opt[Int]('h', "height")
         .text("Import to height")
