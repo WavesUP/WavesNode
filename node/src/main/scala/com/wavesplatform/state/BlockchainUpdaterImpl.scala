@@ -20,7 +20,7 @@ import com.wavesplatform.state.diffs.BlockDiffer
 import com.wavesplatform.state.extensions.composite.{CompositeAddressTransactions, CompositeDistributions}
 import com.wavesplatform.state.extensions.{AddressTransactions, Distributions}
 import com.wavesplatform.state.reader.{CompositeBlockchain, LeaseDetails}
-import com.wavesplatform.transaction.Asset.IssuedAsset
+import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
 import com.wavesplatform.transaction.TxValidationError.{BlockAppendError, GenericError, MicroBlockAppendError}
 import com.wavesplatform.transaction._
 import com.wavesplatform.transaction.lease._
@@ -125,10 +125,11 @@ class BlockchainUpdaterImpl(private val blockchain: LevelDBWriter,
   }
 
   private def rewardForBlock(block: Block): Option[Long] = {
-    val settings = blockchain.settings.rewardsSettings
-    val height   = blockchain.height + 1
+    val settings = this.settings.rewardsSettings
+    val height   = this.height + 1
 
-    blockchain.featureActivationHeight(BlockchainFeatures.BlockReward.id)
+    blockchain
+      .featureActivationHeight(BlockchainFeatures.BlockReward.id)
       .filter(_ <= height)
       .flatMap { activatedAt =>
         def votes: Seq[Long] = {
@@ -236,11 +237,12 @@ class BlockchainUpdaterImpl(private val blockchain: LevelDBWriter,
                       miningConstraints.total
                     }
 
-                    val reward = rewardForBlock(block)
+                    val prevReward = ng.reward
+                    val reward     = rewardForBlock(block)
 
                     val diff = BlockDiffer
                       .fromBlock(
-                        CompositeBlockchain(blockchain, Some(referencedLiquidDiff), Some(referencedForgedBlock), carry, reward),
+                        CompositeBlockchain(blockchain, Some(referencedLiquidDiff), Some(referencedForgedBlock), carry, prevReward),
                         Some(referencedForgedBlock),
                         block,
                         constraint,
@@ -248,7 +250,7 @@ class BlockchainUpdaterImpl(private val blockchain: LevelDBWriter,
                       )
 
                     diff.map { hardenedDiff =>
-                      blockchain.append(referencedLiquidDiff, carry, totalFee, reward, referencedForgedBlock)
+                      blockchain.append(referencedLiquidDiff, carry, totalFee, prevReward, referencedForgedBlock)
                       TxsInBlockchainStats.record(ng.transactions.size)
                       Some((hardenedDiff, discarded.flatMap(_.transactionData), reward))
                     }
@@ -382,10 +384,10 @@ class BlockchainUpdaterImpl(private val blockchain: LevelDBWriter,
   }
 
   override def blockReward(height: Int): Option[Long] = readLock {
-   blockchain.blockReward(height) match {
-     case r @ Some(_) => r
-     case None        => ngState.collect { case ng if blockchain.height + 1 == height => ng.reward }.flatten
-   }
+    blockchain.blockReward(height) match {
+      case r @ Some(_) => r
+      case None        => ngState.collect { case ng if blockchain.height + 1 == height => ng.reward }.flatten
+    }
   }
 
   override def lastBlockReward: Option[Long] = readLock {
@@ -393,16 +395,28 @@ class BlockchainUpdaterImpl(private val blockchain: LevelDBWriter,
   }
 
   override def blockRewardVotes(height: Int): Seq[Long] = readLock {
-    ngState match {
-      case Some(ng) if this.height == height =>
-        blockchain.blockRewardVotes(height - 1).tail :+ ng.base.rewardVote
-      case _                                 =>
-        blockchain.blockRewardVotes(height)
+    val mayBeVote =
+      for {
+        activatedAt <- activatedFeatures.get(BlockchainFeatures.BlockReward.id).filter(_ <= height)
+        vote <- ngState.collect {
+          case ng if settings.rewardsSettings.votingWindow(activatedAt, height).contains(height) => ng.base.rewardVote
+        }
+      } yield vote
+
+    val innerVotes = blockchain.blockRewardVotes(height)
+
+    mayBeVote match {
+      case Some(vote) => innerVotes :+ vote
+      case None       => innerVotes
     }
   }
 
   override def wavesAmount(height: Int): BigInt = readLock {
-    blockchain.wavesAmount(height - ngState.fold(0)(_ => 1)) + ngState.flatMap(s => s.reward).map(BigInt(_)).getOrElse(BigInt(0))
+    ngState match {
+      case Some(ng) if this.height == height =>
+        blockchain.wavesAmount(height - 1) + ng.reward.map(BigInt(_)).getOrElse(BigInt(0))
+      case _ => blockchain.wavesAmount(height)
+    }
   }
 
   private def liquidBlockHeaderAndSize() = ngState.map { s =>
@@ -704,7 +718,13 @@ class BlockchainUpdaterImpl(private val blockchain: LevelDBWriter,
   override def balance(address: Address, mayBeAssetId: Asset): Long = readLock {
     ngState match {
       case Some(ng) =>
-        blockchain.balance(address, mayBeAssetId) + ng.bestLiquidDiff.portfolios.getOrElse(address, Portfolio.empty).balanceOf(mayBeAssetId)
+        val innerBalance = blockchain.balance(address, mayBeAssetId)
+        val ngBalance = (ng.bestLiquidDiff.portfolios.get(address), mayBeAssetId) match {
+          case (Some(p), Waves) => p.balanceOf(Waves) + ng.reward.getOrElse(0L)
+          case (Some(p), assetId) => p.balanceOf(assetId)
+          case (None, _) => 0L
+        }
+        innerBalance + ngBalance
       case None =>
         blockchain.balance(address, mayBeAssetId)
     }
