@@ -14,9 +14,9 @@ import com.wavesplatform.extensions.{Context, Extension}
 import com.wavesplatform.history.StorageFactory
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.protobuf.block.PBBlocks
-import com.wavesplatform.settings.WavesSettings
+import com.wavesplatform.settings.{Constants, WavesSettings}
 import com.wavesplatform.state.appender.BlockAppender
-import com.wavesplatform.state.{Blockchain, BlockchainUpdated}
+import com.wavesplatform.state.{Blockchain, BlockchainUpdated, BlockchainUpdaterImpl}
 import com.wavesplatform.transaction.{Asset, BlockchainUpdater, DiscardedBlocks, Transaction}
 import com.wavesplatform.utils._
 import com.wavesplatform.utx.{UtxPool, UtxPoolImpl}
@@ -196,7 +196,15 @@ object Importer extends ScorexLogging {
                   log.error(s"Error appending block: $ve")
                   quit = true
                 case _ =>
-                  counter = counter + 1
+                  import com.wavesplatform.common.utils._
+                  lazy val totalWaves = blockchainUpdater.wavesDistribution(blockchainUpdater.height).explicitGet().values.sum
+                  if (blockchainUpdater.height >= 1500000 && blockchainUpdater.height % 1000 == 0 && totalWaves + blockchainUpdater.carryFee != (Constants.TotalWaves * Constants.UnitsInWave)) {
+                    log.error(s"Total waves inconsistent at ${blockchainUpdater.height}: ${totalWaves + blockchainUpdater.carryFee}")
+                    blockchainUpdater.asInstanceOf[BlockchainUpdaterImpl].removeAfter(blockchainUpdater.blockAt(blockchainUpdater.height - 1000).get.uniqueId)
+                    quit = true
+                  } else counter = counter + 1
+                  val balance = blockchainUpdater.balance(Address.fromString("3PJEPHsDNtfDRxxaja8wEp3mCXp5kpLYsLS").explicitGet())
+                  log.debug(s"Balance of 3PJEPHsDNtfDRxxaja8wEp3mCXp5kpLYsLS is $balance")
               }
             }
           }
