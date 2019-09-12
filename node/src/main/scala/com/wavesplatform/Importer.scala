@@ -89,10 +89,10 @@ object Importer extends ScorexLogging {
                           quit = true
                         case _ =>
                           import com.wavesplatform.common.utils._
-                          val totalWaves = blockchainUpdater.wavesDistribution(blockchainUpdater.height).explicitGet().values.sum
-                          if (totalWaves + blockchainUpdater.carryFee != (Constants.TotalWaves * Constants.UnitsInWave)) {
-                            log.error(s"Total waves inconsistent: ${totalWaves + blockchainUpdater.carryFee}")
-                            blockchainUpdater.removeAfter(block.reference)
+                          lazy val totalWaves = blockchainUpdater.wavesDistribution(blockchainUpdater.height).explicitGet().values.sum
+                          if (blockchainUpdater.height >= 1500000 && blockchainUpdater.height % 1000 == 0 && totalWaves + blockchainUpdater.carryFee != (Constants.TotalWaves * Constants.UnitsInWave)) {
+                            log.error(s"Total waves inconsistent at ${blockchainUpdater.height}: ${totalWaves + blockchainUpdater.carryFee}")
+                            blockchainUpdater.removeAfter(blockchainUpdater.blockAt(blockchainUpdater.height - 1000).get.uniqueId)
                             quit = true
                           } else counter = counter + 1
                       }
