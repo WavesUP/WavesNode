@@ -84,6 +84,7 @@ object Importer extends ScorexLogging {
                           log.error(s"Error appending block: $ve")
                           quit = true
                         case _ =>
+                          import com.wavesplatform.common.utils._
                           val totalWaves = blockchainUpdater.wavesDistribution(blockchainUpdater.height).explicitGet().values.sum
                           if (totalWaves + blockchainUpdater.carryFee != (Constants.TotalWaves * Constants.UnitsInWave)) {
                             log.error(s"Total waves inconsistent: ${totalWaves + blockchainUpdater.carryFee}")
