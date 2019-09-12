@@ -9,6 +9,7 @@ import com.wavesplatform.consensus.PoSSelector
 import com.wavesplatform.db.openDB
 import com.wavesplatform.history.StorageFactory
 import com.wavesplatform.protobuf.block.PBBlocks
+import com.wavesplatform.settings.Constants
 import com.wavesplatform.state.appender.BlockAppender
 import com.wavesplatform.utils._
 import com.wavesplatform.utx.UtxPoolImpl
@@ -78,7 +79,12 @@ object Importer extends ScorexLogging {
                           log.error(s"Error appending block: $ve")
                           quit = true
                         case _ =>
-                          counter = counter + 1
+                          val totalWaves = blockchainUpdater.wavesDistribution(blockchainUpdater.height).explicitGet().values.sum
+                          if (totalWaves + blockchainUpdater.carryFee != (Constants.TotalWaves * Constants.UnitsInWave)) {
+                            log.error(s"Total waves inconsistent: ${totalWaves + blockchainUpdater.carryFee}")
+                            blockchainUpdater.removeAfter(block.reference)
+                            quit = true
+                          } else counter = counter + 1
                       }
                     }
                   }
