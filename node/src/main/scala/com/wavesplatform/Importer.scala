@@ -35,9 +35,13 @@ object Importer extends ScorexLogging {
         val time = new NTP(settings.ntpServer)
         log.info(s"Loading file '$blockchainFile'")
 
-        def inputStream() =
-          if (blockchainFile.startsWith("http://") || blockchainFile.startsWith("https://")) new URL(blockchainFile).openStream()
-          else new FileInputStream(blockchainFile)
+        def inputStream() = {
+          val baseStream =
+            if (blockchainFile.startsWith("http://") || blockchainFile.startsWith("https://")) new URL(blockchainFile).openStream()
+            else new FileInputStream(blockchainFile)
+
+          new BufferedInputStream(baseStream, 1024 * 1024)
+        }
 
         Try(inputStream()) match {
           case Success(inputStream) =>
