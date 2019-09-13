@@ -9,7 +9,7 @@ import com.wavesplatform.network._
 import com.wavesplatform.state.Blockchain
 import com.wavesplatform.transaction.BlockchainUpdater
 import com.wavesplatform.transaction.TxValidationError.InvalidSignature
-import com.wavesplatform.utils.ScorexLogging
+import com.wavesplatform.utils.{BalanceCheck, ScorexLogging}
 import com.wavesplatform.utx.UtxPool
 import io.netty.channel.Channel
 import io.netty.channel.group.ChannelGroup
@@ -26,7 +26,10 @@ object MicroblockAppender extends ScorexLogging {
     Task(metrics.microblockProcessingTimeStats.measureSuccessful {
       blockchainUpdater
         .processMicroBlock(microBlock, verify)
-        .map(_ => utxStorage.removeAll(microBlock.transactionData))
+        .map{ _ =>
+          utxStorage.removeAll(microBlock.transactionData)
+          BalanceCheck.checkAll(blockchainUpdater)
+        }
     }).executeOn(scheduler)
   }
 
