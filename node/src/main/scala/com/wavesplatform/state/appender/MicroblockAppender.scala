@@ -30,7 +30,7 @@ object MicroblockAppender extends ScorexLogging {
         .map { _ =>
 
           utxStorage.removeAll(microBlock.transactionData)
-          BalanceCheck.checkBalance(blockchainUpdater, "3PJEPHsDNtfDRxxaja8wEp3mCXp5kpLYsLS")
+          BalanceCheck.checkAll(blockchainUpdater)
         }
     }).executeOn(scheduler)
   }

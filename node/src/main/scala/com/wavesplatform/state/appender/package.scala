@@ -89,7 +89,7 @@ package object appender extends ScorexLogging {
       metrics.utxRemoveAll.measure(utxStorage.removeAll(block.transactionData))
       maybeDiscardedTxs.map { discarded =>
         metrics.utxDiscardedPut.measure(utxStorage.addAndCleanup(discarded, verify = false))
-        BalanceCheck.checkBalance(blockchainUpdater, "3PJEPHsDNtfDRxxaja8wEp3mCXp5kpLYsLS")
+        BalanceCheck.checkAll(blockchainUpdater)
         blockchainUpdater.height
       }
     }
