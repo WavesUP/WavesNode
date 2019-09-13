@@ -5,7 +5,6 @@ import java.net.URL
 
 import com.google.common.primitives.Ints
 import com.wavesplatform.Exporter.Formats
-import com.wavesplatform.account.Address
 import com.wavesplatform.block.Block
 import com.wavesplatform.consensus.PoSSelector
 import com.wavesplatform.db.openDB
@@ -96,8 +95,6 @@ object Importer extends ScorexLogging {
                             blockchainUpdater.removeAfter(blockchainUpdater.blockAt(blockchainUpdater.height - 1000).get.uniqueId)
                             quit = true
                           } else counter = counter + 1
-                          val balance = blockchainUpdater.balance(Address.fromString("3PJEPHsDNtfDRxxaja8wEp3mCXp5kpLYsLS").explicitGet())
-                          log.debug(s"Balance of 3PJEPHsDNtfDRxxaja8wEp3mCXp5kpLYsLS is $balance")
                       }
                     }
                   }
