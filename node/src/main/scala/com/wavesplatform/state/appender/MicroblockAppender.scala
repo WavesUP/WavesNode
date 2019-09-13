@@ -9,7 +9,7 @@ import com.wavesplatform.network._
 import com.wavesplatform.state.Blockchain
 import com.wavesplatform.transaction.BlockchainUpdater
 import com.wavesplatform.transaction.TxValidationError.InvalidSignature
-import com.wavesplatform.utils.ScorexLogging
+import com.wavesplatform.utils.{BalanceCheck, ScorexLogging}
 import com.wavesplatform.utx.UtxPool
 import io.netty.channel.Channel
 import io.netty.channel.group.ChannelGroup
@@ -21,20 +21,27 @@ import scala.util.{Left, Right}
 
 object MicroblockAppender extends ScorexLogging {
   def apply(blockchainUpdater: BlockchainUpdater with Blockchain, utxStorage: UtxPool, scheduler: Scheduler, verify: Boolean = true)(
-      microBlock: MicroBlock): Task[Either[ValidationError, Unit]] = {
+      microBlock: MicroBlock
+  ): Task[Either[ValidationError, Unit]] = {
 
     Task(metrics.microblockProcessingTimeStats.measureSuccessful {
       blockchainUpdater
         .processMicroBlock(microBlock, verify)
-        .map(_ => utxStorage.removeAll(microBlock.transactionData))
+        .map { _ =>
+
+          utxStorage.removeAll(microBlock.transactionData)
+          BalanceCheck.checkBalance(blockchainUpdater, "3PJEPHsDNtfDRxxaja8wEp3mCXp5kpLYsLS")
+        }
     }).executeOn(scheduler)
   }
 
-  def apply(blockchainUpdater: BlockchainUpdater with Blockchain,
-            utxStorage: UtxPool,
-            allChannels: ChannelGroup,
-            peerDatabase: PeerDatabase,
-            scheduler: Scheduler)(ch: Channel, md: MicroblockData): Task[Unit] = {
+  def apply(
+      blockchainUpdater: BlockchainUpdater with Blockchain,
+      utxStorage: UtxPool,
+      allChannels: ChannelGroup,
+      peerDatabase: PeerDatabase,
+      scheduler: Scheduler
+  )(ch: Channel, md: MicroblockData): Task[Unit] = {
     import md.microBlock
     val microblockTotalResBlockSig = microBlock.totalResBlockSig
     (for {
