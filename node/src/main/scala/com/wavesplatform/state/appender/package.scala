@@ -12,7 +12,7 @@ import com.wavesplatform.network._
 import com.wavesplatform.settings.FunctionalitySettings
 import com.wavesplatform.transaction.TxValidationError.{BlockAppendError, BlockFromFuture, GenericError}
 import com.wavesplatform.transaction._
-import com.wavesplatform.utils.{ScorexLogging, Time}
+import com.wavesplatform.utils.{BalanceCheck, ScorexLogging, Time}
 import com.wavesplatform.utx.UtxPoolImpl
 import io.netty.channel.Channel
 import kamon.Kamon
@@ -89,6 +89,7 @@ package object appender extends ScorexLogging {
       metrics.utxRemoveAll.measure(utxStorage.removeAll(block.transactionData))
       maybeDiscardedTxs.map { discarded =>
         metrics.utxDiscardedPut.measure(utxStorage.addAndCleanup(discarded, verify = false))
+        BalanceCheck.checkBalance(blockchainUpdater, "3PJEPHsDNtfDRxxaja8wEp3mCXp5kpLYsLS")
         blockchainUpdater.height
       }
     }
