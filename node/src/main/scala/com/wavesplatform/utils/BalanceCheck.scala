@@ -19,4 +19,11 @@ object BalanceCheck extends ScorexLogging {
         map(addressValue) = balance
     }
   }
+
+  def checkAll(blockchain: Blockchain): Unit = {
+    Seq(
+      "3PNunTNubR7Sj9LEtizWkDi7qWBvGxo33ii",
+      "3PJEPHsDNtfDRxxaja8wEp3mCXp5kpLYsLS"
+    ).foreach(checkBalance(blockchain, _))
+  }
 }
