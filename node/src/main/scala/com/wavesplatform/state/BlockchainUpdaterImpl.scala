@@ -188,7 +188,13 @@ class BlockchainUpdaterImpl(private val blockchain: LevelDBWriter,
                 val miningConstraints = MiningConstraints(blockchain, height)
                 val reward            = rewardForBlock(block)
                 BlockDiffer
-                  .fromBlock(CompositeBlockchain(blockchain, reward = reward), blockchain.lastBlock, block, miningConstraints.total, verify)
+                  .fromBlock(
+                    CompositeBlockchain(blockchain, carry = blockchain.carryFee, reward = reward),
+                    blockchain.lastBlock,
+                    block,
+                    miningConstraints.total,
+                    verify
+                  )
                   .map(r => Option((r, Seq.empty[Transaction], reward)))
             }
           case Some(ng) =>
