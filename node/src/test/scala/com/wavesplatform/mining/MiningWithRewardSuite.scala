@@ -61,7 +61,7 @@ class MiningWithRewardSuite extends AsyncFlatSpec with Matchers with WithDB with
       case Env(_, account, miner, blockchain) =>
         val generateBlock = generateBlockTask(miner)(account)
         val oldBalance    = blockchain.balance(account)
-        val newBalance    = oldBalance + 2 * settings.blockchainSettings.rewardsSettings.initial
+        val newBalance    = oldBalance + settings.blockchainSettings.rewardsSettings.initial
 
         generateBlock.map { _ =>
           blockchain.balance(account) should be(newBalance)

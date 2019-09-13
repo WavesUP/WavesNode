@@ -83,7 +83,7 @@ class BlockRewardSpec extends FreeSpec with ScalaCheckPropertyChecks with WithDo
   } yield (miner1, transfers, Seq(genesisBlock, b2), Seq(b3, b4), b5, Seq(b6, b7, b8, b9), Seq(b10, b11, b12, b13, b14), b15)
 
   "Miner receives reward as soon as the feature is activated" in forAll(activationScenario) {
-    case (miner, transfers, b1, b2, activationBlock, b3, b4, newEpochBlock) =>
+    case (miner, transfers, b1, b2, activationBlock, b3, b4, newTermBlock) =>
       withDomain(rewardSettings) { d =>
         val totalFee = transfers.map(_.fee).sum
 
@@ -115,7 +115,7 @@ class BlockRewardSpec extends FreeSpec with ScalaCheckPropertyChecks with WithDo
 
         val NextReward = InitialReward + 1 * Constants.UnitsInWave
 
-        d.blockchainUpdater.processBlock(newEpochBlock).explicitGet()
+        d.blockchainUpdater.processBlock(newTermBlock).explicitGet()
         d.blockchainUpdater.height shouldEqual BlockRewardActivationHeight + 10
         d.blockchainUpdater.isFeatureActivated(BlockchainFeatures.BlockReward) shouldBe true
         d.blockchainUpdater.balance(miner) shouldBe 10 * InitialReward + InitialMinerBalance + totalFee + NextReward

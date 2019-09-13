@@ -242,7 +242,7 @@ class BlockchainUpdaterImpl(private val blockchain: LevelDBWriter,
 
                     val diff = BlockDiffer
                       .fromBlock(
-                        CompositeBlockchain(blockchain, Some(referencedLiquidDiff), Some(referencedForgedBlock), carry, prevReward),
+                        CompositeBlockchain(blockchain, Some(referencedLiquidDiff), Some(referencedForgedBlock), carry, reward),
                         Some(referencedForgedBlock),
                         block,
                         constraint,

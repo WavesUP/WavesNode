@@ -23,7 +23,7 @@ case class RewardsSettings(
 
   def nearestTermEnd(activatedAt: Int, height: Int): Int = {
     require(height >= activatedAt)
-    val diff = if (height == activatedAt) 1 else height - activatedAt + 1
+    val diff = height - activatedAt + 1
     val mul  = math.ceil(diff.toDouble / term).toInt
     activatedAt + mul * term - 1
   }
