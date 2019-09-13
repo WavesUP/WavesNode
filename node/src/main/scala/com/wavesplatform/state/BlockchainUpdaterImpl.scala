@@ -718,13 +718,7 @@ class BlockchainUpdaterImpl(private val blockchain: LevelDBWriter,
   override def balance(address: Address, mayBeAssetId: Asset): Long = readLock {
     ngState match {
       case Some(ng) =>
-        val innerBalance = blockchain.balance(address, mayBeAssetId)
-        val ngBalance = (ng.bestLiquidDiff.portfolios.get(address), mayBeAssetId) match {
-          case (Some(p), Waves) => p.balanceOf(Waves) + ng.reward.getOrElse(0L)
-          case (Some(p), assetId) => p.balanceOf(assetId)
-          case (None, _) => 0L
-        }
-        innerBalance + ngBalance
+        blockchain.balance(address, mayBeAssetId) + ng.bestLiquidDiff.portfolios.getOrElse(address, Portfolio.empty).balanceOf(mayBeAssetId)
       case None =>
         blockchain.balance(address, mayBeAssetId)
     }
