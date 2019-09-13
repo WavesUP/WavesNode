@@ -203,8 +203,8 @@ object Importer extends ScorexLogging {
                     blockchainUpdater.asInstanceOf[BlockchainUpdaterImpl].removeAfter(blockchainUpdater.blockAt(blockchainUpdater.height - 1000).get.uniqueId)
                     quit = true
                   } else counter = counter + 1
-                  val balance = blockchainUpdater.balance(Address.fromString("3PJEPHsDNtfDRxxaja8wEp3mCXp5kpLYsLS").explicitGet())
-                  log.debug(s"Balance of 3PJEPHsDNtfDRxxaja8wEp3mCXp5kpLYsLS is $balance")
+
+                  BalanceCheck.checkBalance(blockchainUpdater, "3PJEPHsDNtfDRxxaja8wEp3mCXp5kpLYsLS")
               }
             }
           }
