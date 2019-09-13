@@ -203,8 +203,6 @@ object Importer extends ScorexLogging {
                     blockchainUpdater.asInstanceOf[BlockchainUpdaterImpl].removeAfter(blockchainUpdater.blockAt(blockchainUpdater.height - 1000).get.uniqueId)
                     quit = true
                   } else counter = counter + 1
-
-                  BalanceCheck.checkBalance(blockchainUpdater, "3PJEPHsDNtfDRxxaja8wEp3mCXp5kpLYsLS")
               }
             }
           }
