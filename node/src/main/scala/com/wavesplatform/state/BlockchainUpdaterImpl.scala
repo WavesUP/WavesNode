@@ -198,7 +198,13 @@ class BlockchainUpdaterImpl(private val blockchain: LevelDBWriter,
                 val miningConstraints = MiningConstraints(blockchain, height)
 
                 BlockDiffer
-                  .fromBlock(blockchain, blockchain.lastBlock, block, miningConstraints.total, verify)
+                  .fromBlock(
+                    CompositeBlockchain(blockchain, carry = blockchain.carryFee, reward = ng.reward),
+                    blockchain.lastBlock,
+                    block,
+                    miningConstraints.total,
+                    verify
+                  )
                   .map { r =>
                     log.trace(
                       s"Better liquid block(score=${block.blockScore()}) received and applied instead of existing(score=${ng.base.blockScore()})")
@@ -214,7 +220,13 @@ class BlockchainUpdaterImpl(private val blockchain: LevelDBWriter,
                   val miningConstraints = MiningConstraints(blockchain, height)
 
                   BlockDiffer
-                    .fromBlock(blockchain, blockchain.lastBlock, block, miningConstraints.total, verify)
+                    .fromBlock(
+                      CompositeBlockchain(blockchain, carry = blockchain.carryFee, reward = ng.reward),
+                      blockchain.lastBlock,
+                      block,
+                      miningConstraints.total,
+                      verify
+                    )
                     .map(r => Some((r, Seq.empty[Transaction], None)))
                 }
               } else
