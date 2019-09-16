@@ -14,7 +14,16 @@ class BlockHeadersTestSuite extends FunSuite with CancelAfterFailure with Transf
 
   override protected def nodeConfigs: Seq[Config] =
     NodeConfigs.newBuilder
-      .overrideBase(_.quorum(1))
+    .overrideBase(_.raw(s"""waves {
+                           |  blockchain.custom.rewards {
+                           |    term = 8
+                           |    initial = 600000000
+                           |    min-increment = 50000000
+                           |    voting-interval = 4
+                           |  }
+                           |  rewards.target = 800000000
+                           |  miner.quorum = 1
+                           |}""".stripMargin))
       .withDefault(1)
       .withSpecial(_.nonMiner)
       .buildNonConflicting()
@@ -62,6 +71,7 @@ class BlockHeadersTestSuite extends FunSuite with CancelAfterFailure with Transf
         header.generator shouldBe block.generator
         header.timestamp shouldBe block.timestamp
         header.signature shouldBe block.signature
+        header.reward shouldBe block.reward
         header.transactionCount shouldBe block.transactions.size
     }
   }
@@ -75,5 +85,11 @@ class BlockHeadersTestSuite extends FunSuite with CancelAfterFailure with Transf
 
     minerBlocks.size shouldEqual (height - 1)
     nonMinerBlocks shouldBe empty
+  }
+
+  test("block headers should have correct info about block reward") {
+    val miner = nodes.head
+
+
   }
 }
