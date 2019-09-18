@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+//import "waves/events.proto";
+
+service BlockchainUpdates {
+    rpc GetFrom(GetFromRequest) returns (stream BlockchainUpdated);
+}
+
+message GetFromRequest {
+    int32 from = 1;
+}
+
+message BlockchainUpdated {
+
+}

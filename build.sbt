@@ -52,7 +52,7 @@ lazy val lang =
       // Compile / scalafmt / sourceDirectories += file("shared").getAbsoluteFile / "src" / "main" / "scala" // This doesn't work too
     )
 
-lazy val langJS  = lang.js.settings(
+lazy val langJS = lang.js.settings(
   libraryDependencies += Dependencies.circeJsInterop.value,
   versionSourceSetting("com.wavesplatform.lang")
 )
@@ -79,6 +79,8 @@ lazy val benchmark = project
   )
 
 lazy val `blockchain-updates` = project.dependsOn(node % "compile;test->test;runtime->provided")
+
+lazy val `blockchain-updates-grpc-server` = project.dependsOn(node % "compile;test->test;runtime->provided")
 
 lazy val it = project
   .settings(
