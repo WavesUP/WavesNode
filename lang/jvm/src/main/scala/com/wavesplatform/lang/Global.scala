@@ -70,4 +70,9 @@ object Global extends BaseGlobal {
 
     override def responseMonad: MonadError[Future] = ???
   }
+
+  override val sttpExecutionContext: ExecutionContext = new ExecutionContext {
+    override def execute(runnable: Runnable): Unit = runnable.run()
+    override def reportFailure(cause: Throwable): Unit = cause.printStackTrace()
+  }
 }

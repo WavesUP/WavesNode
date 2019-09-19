@@ -7,7 +7,8 @@ import com.softwaremill.sttp.{FetchBackend, FetchOptions, SttpBackend}
 import com.wavesplatform.lang.v1.BaseGlobal
 import com.wavesplatform.lang.v1.evaluator.ctx.impl.crypto.RSA.DigestAlgorithm
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
+import scala.scalajs.concurrent.JSExecutionContext
 import scala.scalajs.js.JSConverters._
 import scala.scalajs.js.typedarray.{ArrayBuffer, Int8Array}
 import scala.util.Try
@@ -112,4 +113,5 @@ object Global extends BaseGlobal {
   }
 
   override val sttpBackend: SttpBackend[Future, Nothing] = FetchBackend(FetchOptions.Default)
+  override val sttpExecutionContext: ExecutionContext = JSExecutionContext.queue
 }
