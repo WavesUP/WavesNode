@@ -250,7 +250,13 @@ object JsAPI {
   def nodeVersion(): js.Dynamic = js.Dynamic.literal("version" -> Version.VersionString)
 
   @JSExportTopLevel("repl")
-  def repl(settings: UndefOr[NodeConnectionSettings]): js.Dynamic = asJs(Repl(settings.toOption))
+  def repl(settings: UndefOr[NodeConnectionSettings]): js.Dynamic = {
+    val g = scalajs.js.Dynamic.global
+    g.fetch = g.require("node-fetch")
+    g.require("abortcontroller-polyfill/dist/polyfill-patch-fetch")
+    g.Headers = g.require("fetch-headers")
+    asJs(Repl(settings.toOption))
+  }
 
   private def asJs(repl: Repl): js.Dynamic =
     jObj(
@@ -258,7 +264,7 @@ object JsAPI {
       "info"      -> repl.info _,
       "totalInfo" -> repl.totalInfo _,
       "clear"     -> repl.clear _,
-      "test"      -> repl.test _ .andThen (_.toJSPromise)
+      "test"      -> (repl.test _) .andThen (_.toJSPromise)
     )
 
   private def mapResult(eval: Either[String, String]): js.Dynamic =
