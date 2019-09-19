@@ -1,9 +1,12 @@
 package com.wavesplatform.lang.v1.repl
 
+import com.softwaremill.sttp
 import com.wavesplatform.lang.v1.compiler.CompilerContext
 import com.wavesplatform.lang.v1.evaluator.ctx.EvaluationContext
 import com.wavesplatform.lang.v1.repl.http.NodeConnectionSettings
 import monix.execution.atomic.Atomic
+
+import scala.concurrent.Future
 
 case class Repl(settings: Option[NodeConnectionSettings] = None) {
   private val initialCtx = buildInitialCtx(settings)
@@ -18,6 +21,11 @@ case class Repl(settings: Option[NodeConnectionSettings] = None) {
   def info(str: String): String = currentState.get()._2.declMap(str)
 
   def totalInfo: String = currentState.get()._2.totalCtx
+
+  import com.softwaremill.sttp.{sttp, _}
+  import com.wavesplatform.lang.v1.repl.global._
+
+  def test(): Future[String] = sttp.get(uri"google.com").send().map(_.unsafeBody)
 
   def execute(expr: String): Either[String, String] =
     perform(

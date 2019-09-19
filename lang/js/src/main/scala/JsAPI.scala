@@ -255,7 +255,8 @@ object JsAPI {
       "evaluate"  -> (repl.execute _ andThen mapResult),
       "info"      -> repl.info _,
       "totalInfo" -> repl.totalInfo _,
-      "clear"     -> repl.clear _
+      "clear"     -> repl.clear _,
+      "test"      -> repl.test _
     )
 
   private def mapResult(eval: Either[String, String]): js.Dynamic =
