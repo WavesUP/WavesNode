@@ -1,4 +1,4 @@
-FROM openjdk:11-jdk-stretch as builder
+FROM openjdk:8-jdk-stretch as builder
 ARG SBT_VERSION=1.2.8
 ARG WAVES_VERSION="latest"
 ARG BRANCH="version-0.17.x"
