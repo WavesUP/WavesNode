@@ -1,15 +1,13 @@
 syntax = "proto3";
+package waves.node.grpc;
+option java_package = "com.wavesplatform.api.grpc";
 
-//import "waves/events.proto";
+import "waves/events/events.proto";
 
 service BlockchainUpdates {
-    rpc GetFrom(GetFromRequest) returns (stream BlockchainUpdated);
+    rpc GetFrom(GetFromRequest) returns (stream waves.events.BlockchainUpdated);
 }
 
 message GetFromRequest {
     int32 from = 1;
-}
-
-message BlockchainUpdated {
-
 }
