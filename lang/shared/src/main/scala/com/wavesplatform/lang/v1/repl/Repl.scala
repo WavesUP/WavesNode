@@ -25,7 +25,7 @@ case class Repl(settings: Option[NodeConnectionSettings] = None) {
   import com.softwaremill.sttp.{sttp, _}
   import com.wavesplatform.lang.v1.repl.global._
 
-  def test(): Future[String] = sttp.get(uri"google.com").send().map(_.unsafeBody)
+  def test(a: String): Future[String] = sttp.get(uri"google.com").send().map(_.unsafeBody)
 
   def execute(expr: String): Either[String, String] =
     perform(

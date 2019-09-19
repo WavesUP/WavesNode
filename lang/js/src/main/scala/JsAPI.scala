@@ -26,6 +26,8 @@ import scala.scalajs.js.JSConverters._
 import scala.scalajs.js.annotation.JSExportTopLevel
 import scala.scalajs.js.{Any, Dictionary, UndefOr}
 
+import com.wavesplatform.lang.v1.repl.global.sttpExecutionContext
+
 object JsAPI {
   private def toJs(ast: EXPR): js.Object = {
     def r(expr: EXPR): js.Object = {
@@ -256,7 +258,7 @@ object JsAPI {
       "info"      -> repl.info _,
       "totalInfo" -> repl.totalInfo _,
       "clear"     -> repl.clear _,
-      "test"      -> repl.test _
+      "test"      -> repl.test _ .andThen (_.toJSPromise)
     )
 
   private def mapResult(eval: Either[String, String]): js.Dynamic =
