@@ -15,6 +15,7 @@ import com.wavesplatform.block.Block.BlockId
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.crypto
+import com.wavesplatform.database.StateHash
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.mining.{Miner, MinerDebugInfo}
 import com.wavesplatform.network.{PeerDatabase, PeerInfo, _}
@@ -58,7 +59,8 @@ case class DebugApiRoute(
     extLoaderStateReporter: Coeval[RxExtensionLoader.State],
     mbsCacheSizesReporter: Coeval[MicroBlockSynchronizer.CacheSizes],
     scoreReporter: Coeval[RxScoreObserver.Stats],
-    configRoot: ConfigObject
+    configRoot: ConfigObject,
+    loadStateHash: Option[Int] => (Int, StateHash)
 ) extends ApiRoute
     with AuthRoute
     with ScorexLogging {
@@ -73,7 +75,7 @@ case class DebugApiRoute(
   override val settings = ws.restAPISettings
   override lazy val route: Route = pathPrefix("debug") {
     stateChanges ~ withAuth {
-      blocks ~ state ~ info ~ stateWaves ~ rollback ~ rollbackTo ~ blacklist ~ portfolios ~ minerInfo ~ historyInfo ~ configInfo ~ print ~ validate
+      blocks ~ state ~ info ~ stateWaves ~ rollback ~ rollbackTo ~ blacklist ~ portfolios ~ minerInfo ~ historyInfo ~ configInfo ~ print ~ validate ~ stateHash
     }
   }
 
@@ -154,6 +156,14 @@ case class DebugApiRoute(
           complete(Json.toJson(portfolio))
       }
     }
+  }
+
+  @Path("/state/hash/{height}")
+  @ApiOperation(value = "State hash", notes = "Get state hash at specific height (or current height, if no height is provided)", httpMethod = "GET")
+  @ApiResponses(Array(new ApiResponse(code = 200, message = "State hash json", response = classOf[StateHash])))
+  def stateHash: Route = (pathPrefix("state" / "hash" / IntNumber.?) & get) { heightOpt =>
+    val (height, hash) = loadStateHash(heightOpt)
+    complete(Json.toJsObject(hash) ++ Json.obj("height" -> height))
   }
 
   @Path("/state")

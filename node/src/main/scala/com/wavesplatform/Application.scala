@@ -20,7 +20,7 @@ import com.wavesplatform.api.http.assets.AssetsApiRoute
 import com.wavesplatform.api.http.leasing.LeaseApiRoute
 import com.wavesplatform.consensus.PoSSelector
 import com.wavesplatform.consensus.nxt.api.http.NxtConsensusApiRoute
-import com.wavesplatform.database.openDB
+import com.wavesplatform.database.{DBExt, Keys, StateHash, openDB}
 import com.wavesplatform.extensions.{Context, Extension}
 import com.wavesplatform.features.EstimatorProvider._
 import com.wavesplatform.features.api.ActivationApiRoute
@@ -254,6 +254,16 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
         forceStopApplication(InvalidApiKey)
       }
 
+      def loadStateHash(height: Option[Int]): (Int, StateHash) = db.readOnly { ro =>
+        val actualHeight = height.getOrElse(ro.get(Keys.height))
+
+        actualHeight -> StateHash(
+          ro.get(Keys.stateHash(actualHeight)),
+          ro.get(Keys.diffHash(actualHeight)),
+          ro.get(Keys.snapshotHash(actualHeight))
+        )
+      }
+
       val apiRoutes = Seq(
         NodeApiRoute(settings.restAPISettings, blockchainUpdater, () => apiShutdown()),
         BlocksApiRoute(settings.restAPISettings, blockchainUpdater),
@@ -289,7 +299,8 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
           extLoaderState,
           mbSyncCacheSizes,
           scoreStatsReporter,
-          configRoot
+          configRoot,
+          loadStateHash
         ),
         AssetsApiRoute(settings.restAPISettings, wallet, utxSynchronizer, blockchainUpdater, time),
         ActivationApiRoute(settings.restAPISettings, settings.featuresSettings, blockchainUpdater),

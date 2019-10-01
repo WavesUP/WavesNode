@@ -246,11 +246,18 @@ class LevelDBWriter(
       sponsorship: Map[IssuedAsset, Sponsorship],
       totalFee: Long,
       reward: Option[Long],
-      scriptResults: Map[ByteStr, InvokeScriptResult]
+      scriptResults: Map[ByteStr, InvokeScriptResult],
+      diffHash: Array[Byte],
+      snapshotHash: Array[Byte]
   ): Unit = readWrite { rw =>
     val expiredKeys = new ArrayBuffer[Array[Byte]]
 
     rw.put(Keys.height, height)
+
+    val newStateHash = StateHash.hash(rw.get(Keys.stateHash(height)), diffHash, snapshotHash)
+    rw.put(Keys.diffHash(height), diffHash)
+    rw.put(Keys.snapshotHash(height), snapshotHash)
+    rw.put(Keys.stateHash(height), newStateHash)
 
     val previousSafeRollbackHeight = rw.get(Keys.safeRollbackHeight)
 
@@ -276,10 +283,8 @@ class LevelDBWriter(
 
     for ((address, id) <- newAddresses) {
       rw.put(Keys.addressId(address), Some(id))
-      log.trace(s"WRITE ${address.stringRepr} -> $id")
       rw.put(Keys.idToAddress(id), address)
     }
-    log.trace(s"WRITE lastAddressId = $lastAddressId")
 
     val threshold        = height - dbSettings.maxRollbackDepth
     val balanceThreshold = height - balanceSnapshotMaxRollbackDepth

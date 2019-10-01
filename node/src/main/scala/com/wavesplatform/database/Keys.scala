@@ -174,4 +174,9 @@ object Keys {
 
   val wavesAmountPrefix: Short = 58
   def wavesAmount(height: Int): Key[BigInt] = Key("waves-amount", h(wavesAmountPrefix, height), Option(_).fold(BigInt(0))(BigInt(_)), _.toByteArray)
+
+  private val EmptyHash = new Array[Byte](com.wavesplatform.crypto.DigestSize)
+  def stateHash(height: Int): Key[Array[Byte]] = Key("state-hash", h(59.toShort, height), Option(_).getOrElse(EmptyHash), identity)
+  def diffHash(height: Int): Key[Array[Byte]] = Key("diff-hash", h(60.toShort, height), Option(_).getOrElse(EmptyHash), identity)
+  def snapshotHash(height: Int): Key[Array[Byte]] = Key("snapshot-hash", h(61.toShort, height), Option(_).getOrElse(EmptyHash), identity)
 }

@@ -86,7 +86,10 @@ object Explorer extends ScorexLogging {
     "block-transactions-fee",
     "invoke-script-result",
     "block-reward",
-    "waves-amount"
+    "waves-amount",
+    "state-hash",
+    "diff-hash",
+    "snapshot-hash"
   )
 
   def main(argsRaw: Array[String]): Unit = {
