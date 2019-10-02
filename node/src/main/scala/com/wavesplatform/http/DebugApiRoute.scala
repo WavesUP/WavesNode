@@ -74,8 +74,8 @@ case class DebugApiRoute(
 
   override val settings = ws.restAPISettings
   override lazy val route: Route = pathPrefix("debug") {
-    stateChanges ~ withAuth {
-      blocks ~ state ~ info ~ stateWaves ~ rollback ~ rollbackTo ~ blacklist ~ portfolios ~ minerInfo ~ historyInfo ~ configInfo ~ print ~ validate ~ stateHash
+    stateChanges ~ stateHash ~ stateHashAt ~ withAuth {
+      blocks ~ state ~ info ~ stateWaves ~ rollback ~ rollbackTo ~ blacklist ~ portfolios ~ minerInfo ~ historyInfo ~ configInfo ~ print ~ validate
     }
   }
 
@@ -158,11 +158,24 @@ case class DebugApiRoute(
     }
   }
 
+  @Path("/state/hash")
+  @ApiOperation(value = "State hash", notes = "Get state hash at current height", httpMethod = "GET")
+  @ApiResponses(Array(new ApiResponse(code = 200, message = "State hash json", response = classOf[StateHash])))
+  def stateHash: Route = (path("state" / "hash") & get) {
+    val (height, hash) = loadStateHash(None)
+    complete(Json.toJsObject(hash) ++ Json.obj("height" -> height))
+  }
+
   @Path("/state/hash/{height}")
   @ApiOperation(value = "State hash", notes = "Get state hash at specific height (or current height, if no height is provided)", httpMethod = "GET")
+  @ApiImplicitParams(
+    Array(
+      new ApiImplicitParam(name = "height", value = "height", dataType = "integer", paramType = "path", required = true)
+    )
+  )
   @ApiResponses(Array(new ApiResponse(code = 200, message = "State hash json", response = classOf[StateHash])))
-  def stateHash: Route = (pathPrefix("state" / "hash" / IntNumber.?) & get) { heightOpt =>
-    val (height, hash) = loadStateHash(heightOpt)
+  def stateHashAt: Route = (path("state" / "hash" / IntNumber) & get) { heightParam =>
+    val (height, hash) = loadStateHash(Some(heightParam))
     complete(Json.toJsObject(hash) ++ Json.obj("height" -> height))
   }
 
