@@ -1,6 +1,7 @@
 package com.wavesplatform.database
 
 import com.wavesplatform.utils.ScorexLogging
+import org.fusesource.leveldbjni.JniDBFactory
 import org.iq80.leveldb.DBFactory
 
 import scala.util.Try
@@ -10,6 +11,7 @@ object LevelDBFactory extends ScorexLogging {
   private val javaFactory   = "org.iq80.leveldb.impl.Iq80DBFactory"
 
   lazy val factory: DBFactory = {
+    println( JniDBFactory.VERSION)
     val isTesting       = sys.props.get("sbt-testing").isDefined
     val nativeFactories = if (isTesting) List.empty else List(nativeFactory)
 

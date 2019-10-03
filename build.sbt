@@ -144,7 +144,11 @@ inScope(Global)(
       val threadNumber = Option(System.getenv("SBT_THREAD_NUMBER")).fold(1)(_.toInt)
       Seq(Tags.limit(Tags.ForkedTestGroup, threadNumber))
     },
-    network := Network(sys.props.get("network"))
+    network := Network(sys.props.get("network")),
+    resolvers ++= Seq(
+      Resolver.mavenLocal,
+//      MavenRepository("fusesource.nexus.snapshots", "http://repo.fusesource.com/nexus/content/groups/public-snapshots")
+    )
   )
 )
 
