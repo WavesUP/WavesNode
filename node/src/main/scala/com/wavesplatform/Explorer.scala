@@ -8,7 +8,7 @@ import com.google.common.primitives.{Longs, Shorts}
 import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.{Base58, Base64, EitherExt2}
-import com.wavesplatform.database.{DBExt, Keys, LevelDBWriter, openDB}
+import com.wavesplatform.database.{DBExt, Keys, LevelDBWriter, StateHash, openDB}
 import com.wavesplatform.settings.Constants
 import com.wavesplatform.state.{Height, TxNum}
 import com.wavesplatform.transaction.Asset.IssuedAsset
@@ -369,6 +369,20 @@ object Explorer extends ScorexLogging {
                   println(s"$assetId : $bal")
             }
           }
+        case "RSH" =>
+          db.readWrite { rw =>
+            log.info("Recalculating state hashes...")
+            var prevStateHash = db.get(Keys.stateHash(0))
+            for (h <- 1 to blockchainHeight) {
+              val diffHash         = db.get(Keys.diffHash(h))
+              val snapshotHash     = db.get(Keys.snapshotHash(h))
+              val currentStateHash = StateHash.hash(prevStateHash, diffHash, snapshotHash)
+              rw.put(Keys.stateHash(h), currentStateHash)
+              prevStateHash = currentStateHash
+            }
+            log.info("Applying changes...")
+          }
+
       }
     } finally db.close()
   }
