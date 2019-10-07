@@ -254,7 +254,7 @@ class LevelDBWriter(
 
     rw.put(Keys.height, height)
 
-    val newStateHash = StateHash.hash(rw.get(Keys.stateHash(height)), diffHash, snapshotHash)
+    val newStateHash = StateHash.hash(rw.get(Keys.stateHash(height - 1)), diffHash, snapshotHash)
     rw.put(Keys.diffHash(height), diffHash)
     rw.put(Keys.snapshotHash(height), snapshotHash)
     rw.put(Keys.stateHash(height), newStateHash)
@@ -594,6 +594,9 @@ class LevelDBWriter(
           rw.delete(Keys.blockTransactionsFee(currentHeight))
           rw.delete(Keys.blockReward(currentHeight))
           rw.delete(Keys.wavesAmount(currentHeight))
+          rw.delete(Keys.stateHash(currentHeight))
+          rw.delete(Keys.diffHash(currentHeight))
+          rw.delete(Keys.snapshotHash(currentHeight))
 
           if (activatedFeatures.get(BlockchainFeatures.DataTransaction.id).contains(currentHeight)) {
             DisableHijackedAliases.revert(rw)
@@ -614,10 +617,7 @@ class LevelDBWriter(
         ordersToInvalidate.result().foreach(discardVolumeAndFee)
         scriptsToDiscard.result().foreach(discardScript)
         assetScriptsToDiscard.result().foreach(discardAssetScript)
-        accountDataToInvalidate.result().foreach {
-          case ak @ (addr, _) =>
-            discardAccountData(ak)
-        }
+        accountDataToInvalidate.result().foreach(discardAccountData)
         discardedBlock
       }
 
