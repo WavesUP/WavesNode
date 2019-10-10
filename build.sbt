@@ -147,7 +147,7 @@ inScope(Global)(
     network := Network(sys.props.get("network")),
     resolvers ++= Seq(
       Resolver.mavenLocal,
-//      MavenRepository("fusesource.nexus.snapshots", "http://repo.fusesource.com/nexus/content/groups/public-snapshots")
+      Resolver.sonatypeRepo("snapshots")
     )
   )
 )

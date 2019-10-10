@@ -134,11 +134,11 @@ object Dependencies {
       kamonModule("influxdb", "1.0.2"),
       "org.influxdb" % "influxdb-java" % "2.14",
       googleGuava,
-      "com.google.code.findbugs"     % "jsr305"             % "3.0.2" % Compile, // javax.annotation stubs
-      "com.typesafe.play"            %% "play-json"         % "2.7.1",
-      "org.fusesource.leveldbjni"    % "leveldbjni-osx"     % "1.9",
-      "com.github.swagger-akka-http" %% "swagger-akka-http" % "1.1.0",
-      "javax.xml.bind"               % "jaxb-api"           % "2.3.1", // javax.xml.bind replacement for JAXB in swagger
+      "com.google.code.findbugs"     % "jsr305"                    % "3.0.2" % Compile, // javax.annotation stubs
+      "com.typesafe.play"            %% "play-json"                % "2.7.1",
+      "com.wavesplatform.leveldbjni" % "leveldbjni-main-platforms" % "1.9.0+",
+      "com.github.swagger-akka-http" %% "swagger-akka-http"        % "1.1.0",
+      "javax.xml.bind"               % "jaxb-api"                  % "2.3.1", // javax.xml.bind replacement for JAXB in swagger
       akkaHttp,
       "org.bitlet"        % "weupnp" % "0.1.4",
       akkaModule("slf4j") % Runtime,
