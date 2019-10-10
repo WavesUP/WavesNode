@@ -136,7 +136,7 @@ object Dependencies {
       googleGuava,
       "com.google.code.findbugs"     % "jsr305"                    % "3.0.2" % Compile, // javax.annotation stubs
       "com.typesafe.play"            %% "play-json"                % "2.7.1",
-      "com.wavesplatform.leveldbjni" % "leveldbjni-main-platforms" % "1.9.0+",
+      "com.wavesplatform.leveldbjni" % "leveldbjni-main-platforms" % "1.9.0-SNAPSHOT",
       "com.github.swagger-akka-http" %% "swagger-akka-http"        % "1.1.0",
       "javax.xml.bind"               % "jaxb-api"                  % "2.3.1", // javax.xml.bind replacement for JAXB in swagger
       akkaHttp,
