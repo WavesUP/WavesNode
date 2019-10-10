@@ -110,7 +110,7 @@ inConfig(Linux)(
 inConfig(Debian)(
   Seq(
     linuxStartScriptTemplate := (packageSource.value / "systemd.service").toURI.toURL,
-    debianPackageDependencies += "java8-runtime-headless",
+    debianPackageDependencies ++= Seq("java8-runtime-headless", "libstdc++6"),
     serviceAutostart := false,
     maintainerScripts := maintainerScriptsFromDirectory(packageSource.value / "debian", Seq("preinst", "postinst", "postrm", "prerm")),
     linuxPackageMappings ++= {
