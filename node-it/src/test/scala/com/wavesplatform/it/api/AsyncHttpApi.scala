@@ -2,29 +2,44 @@ package com.wavesplatform.it.api
 
 import java.io.IOException
 import java.net.InetSocketAddress
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.TimeoutException
 
+import com.google.protobuf
+import com.google.protobuf.ByteString
+import com.google.protobuf.wrappers.StringValue
+import com.wavesplatform.account.{AddressScheme, KeyPair, PrivateKey, PublicKey}
+import com.wavesplatform.api.grpc.{AccountsApiGrpc, BlockRangeRequest, BlockRequest, BlocksApiGrpc, SignRequest, TransactionsApiGrpc, TransactionsRequest}
 import com.wavesplatform.api.http.RewardApiRoute.RewardStatus
 import com.wavesplatform.api.http.assets._
 import com.wavesplatform.api.http.{AddressApiRoute, ConnectReq}
-import com.wavesplatform.common.utils.EitherExt2
+import com.wavesplatform.crypto
+import com.wavesplatform.common.state.ByteStr
+import com.wavesplatform.common.utils.{Base58, EitherExt2}
 import com.wavesplatform.features.api.ActivationStatus
 import com.wavesplatform.http.DebugMessage._
 import com.wavesplatform.http.{DebugMessage, RollbackParams, `X-Api-Key`}
 import com.wavesplatform.it.Node
+import com.wavesplatform.it.api.SyncHttpApi.NodeExtGrpc
 import com.wavesplatform.it.util.GlobalTimer.{instance => timer}
 import com.wavesplatform.it.util._
+import com.wavesplatform.lang.ValidationError
+import com.wavesplatform.lang.script.{Script => Scr}
 import com.wavesplatform.lang.v1.FunctionHeader
 import com.wavesplatform.lang.v1.compiler.Terms
 import com.wavesplatform.lang.v1.compiler.Terms.FUNCTION_CALL
+import com.wavesplatform.protobuf.Amount
+import com.wavesplatform.protobuf.block.PBBlocks
+import com.wavesplatform.protobuf.transaction.{ExchangeTransactionData, IssueTransactionData, PBOrders, PBTransactions, Recipient, Script, SignedTransaction, Transaction}
 import com.wavesplatform.state.{AssetDistribution, AssetDistributionPage, DataEntry, Portfolio}
-import com.wavesplatform.transaction.assets.{BurnTransaction, IssueTransaction, SetAssetScriptTransaction, SponsorFeeTransaction}
+import com.wavesplatform.transaction.assets.exchange.{AssetPair, ExchangeTransactionV1, ExchangeTransactionV2, Order, OrderV1}
+import com.wavesplatform.transaction.assets.{BurnTransaction, IssueTransaction, IssueTransactionV1, IssueTransactionV2, SetAssetScriptTransaction, SponsorFeeTransaction}
 import com.wavesplatform.transaction.lease.{LeaseCancelTransaction, LeaseTransaction}
 import com.wavesplatform.transaction.smart.{InvokeScriptTransaction, SetScriptTransaction}
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.Transfer
 import com.wavesplatform.transaction.transfer._
-import com.wavesplatform.transaction.{CreateAliasTransaction, DataTransaction}
+import com.wavesplatform.transaction.{Asset, CreateAliasTransaction, DataTransaction}
 import org.asynchttpclient.Dsl.{get => _get, post => _post, put => _put}
 import org.asynchttpclient._
 import org.asynchttpclient.util.HttpConstants.ResponseStatusCodes.OK_200
@@ -38,12 +53,13 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.Future.traverse
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
+import scala.util.{Either, Failure, Success}
 
 object AsyncHttpApi extends Assertions {
 
   //noinspection ScalaStyle
   implicit class NodeAsyncHttpApi(val n: Node) extends Assertions with Matchers {
+    import com.wavesplatform.block.{Block => Blck, BlockHeader => BlckHeader}
 
     def get(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] =
       retrying(f(_get(s"${n.nodeApiEndpoint}$path")).build())
@@ -292,6 +308,48 @@ object AsyncHttpApi extends Assertions {
       val jsUpdated = if (script.isDefined) js ++ Json.obj("script" -> JsString(script.get)) else js
       signAndBroadcast(jsUpdated)
 
+    }
+
+    def broadcastIssue(source: KeyPair,
+                       name: String,
+                       description: String,
+                       quantity: Long,
+                       decimals: Byte,
+                       reissuable: Boolean,
+                       fee: Long,
+                       script: Option[String],
+                       version: Int = 2,
+                       waitForTx: Boolean = false
+                      ): Future[Transaction] = {
+      val tx = if (version == 2) {
+        IssueTransactionV2
+          .selfSigned(
+            chainId = AddressScheme.current.chainId,
+            sender = source,
+            name = name.getBytes(StandardCharsets.UTF_8),
+            description = description.getBytes(StandardCharsets.UTF_8),
+            quantity = quantity,
+            decimals = decimals,
+            reissuable = reissuable,
+            script = script.map(x => Scr.fromBase64String(x).explicitGet()),
+            fee = fee,
+            timestamp = System.currentTimeMillis()
+          ).explicitGet()
+      } else {
+        IssueTransactionV1
+          .selfSigned(
+            sender = source,
+            name = name.getBytes(StandardCharsets.UTF_8),
+            description = description.getBytes(StandardCharsets.UTF_8),
+            quantity = quantity,
+            decimals = decimals,
+            reissuable = reissuable,
+            fee = fee,
+            timestamp = System.currentTimeMillis()
+          ).explicitGet()
+      }
+
+      broadcastRequest(tx.json())
     }
 
     def setScript(sender: String, script: Option[String] = None, fee: Long = 1000000, version: Byte = 1): Future[Transaction] = {
@@ -640,6 +698,7 @@ object AsyncHttpApi extends Assertions {
     def calculateFee(json: JsValue): Future[FeeInfo] =
       postJsObjectWithApiKey("/transactions/calculateFee", json).as[FeeInfo]
 
+    def grpc: NodeExtGrpc = new NodeExtGrpc(n)
   }
 
   implicit class NodesAsyncHttpApi(nodes: Seq[Node]) extends Matchers {
@@ -700,4 +759,82 @@ object AsyncHttpApi extends Assertions {
     def withApiKey(x: String): RequestBuilder = self.setHeader(`X-Api-Key`.name, x)
   }
 
+  class NodeExtGrpc(n: Node) {
+
+    import com.wavesplatform.protobuf.transaction.{Transaction => PBTransaction}
+    import com.wavesplatform.protobuf.order.{Order => PBOrder}
+
+    private[this] lazy val blocks = BlocksApiGrpc.stub(n.grpcChannel)
+    private[this] lazy val transactions = TransactionsApiGrpc.stub(n.grpcChannel)
+
+    def blockAt(height: Int): Future[Block] = {
+      blocks.getBlock(
+        BlockRequest.of(
+          includeTransactions = true, BlockRequest.Request.Height.apply(height))).map(r => PBBlocks.vanilla(r.getBlock).explicitGet().json().as[Block])
+    }
+
+    def blockAtTest(height: Int): Future[ /*Block*/ JsObject] = {
+      blocks.getBlock(BlockRequest.of(includeTransactions = true, BlockRequest.Request.Height.apply(height))).map(r => PBBlocks.vanilla(r.getBlock).explicitGet().json())
+
+    }
+
+    def broadcastIssue(source: KeyPair,
+                       name: String,
+                       description: String,
+                       quantity: Long,
+                       decimals: Byte,
+                       reissuable: Boolean,
+                       fee: Long,
+                       script: Option[String],
+                       version: Int = 2): Future[Transaction] = {
+      val unsigned = PBTransaction(
+        AddressScheme.current.chainId,
+        ByteString.copyFrom(source.publicKey),
+        Some(Amount.of(ByteString.EMPTY, fee)),
+        System.currentTimeMillis(),
+        version,
+        PBTransaction.Data.Issue(IssueTransactionData.of(
+          ByteString.copyFrom(name.getBytes(StandardCharsets.UTF_8)),
+          ByteString.copyFrom(description.getBytes(StandardCharsets.UTF_8)),
+          quantity,
+          decimals,
+          reissuable,
+          Some(Script.of(if (script.isDefined) ByteString.copyFrom(script.get.getBytes) else ByteString.EMPTY)))))
+
+      val proofs = crypto.sign(source, PBTransactions.vanilla(SignedTransaction(Some(unsigned))).right.get.bodyBytes())
+
+      transactions.broadcast(SignedTransaction.of(Some(unsigned),Seq(ByteString.copyFrom(proofs))))
+        .map(t => PBTransactions.vanilla(t).explicitGet().json().as[Transaction])
+      }
+
+    def exchange(matcher: KeyPair,
+                 buyOrder: Order,
+                 sellOrder: Order,
+                 amount: Long,
+                 price: Long,
+                 buyMatcherFee: Long,
+                 sellMatcherFee: Long,
+                 fee: Long,
+                 timestamp: Long,
+                 version: Byte,
+                 matcherFeeAssetId: String = "WAVES"): Future[Transaction] = {
+
+      val unsigned = PBTransaction(
+        AddressScheme.current.chainId,
+        ByteString.copyFrom(matcher.publicKey),
+        Some(Amount.of(if (matcherFeeAssetId == "WAVES") ByteString.EMPTY else ByteString.copyFrom(Base58.decode(matcherFeeAssetId)), fee)),
+        timestamp,
+        version,
+        PBTransaction.Data.Exchange(ExchangeTransactionData.of(
+          amount,price,buyMatcherFee,sellMatcherFee,
+          Seq(PBOrders.protobuf(buyOrder),PBOrders.protobuf(sellOrder))
+        )))
+
+      val proofs = crypto.sign(matcher, PBTransactions.vanilla(SignedTransaction(Some(unsigned))).right.get.bodyBytes())
+      val transaction = SignedTransaction.of(Some(unsigned), Seq(ByteString.copyFrom(proofs)))
+
+      transactions.broadcast(transaction).map(t => PBTransactions.vanilla(t).explicitGet().json().as[Transaction])
+
+    }
+  }
 }

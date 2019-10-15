@@ -1,7 +1,10 @@
 package com.wavesplatform.it.api
 
+import com.wavesplatform.api.grpc.GRPCErrors
+import com.wavesplatform.api.http.ApiError
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.transaction.assets.exchange.AssetPair
+import io.grpc.StatusRuntimeException
 import play.api.libs.json._
 
 import scala.util.{Failure, Success}
@@ -10,6 +13,9 @@ import scala.util.{Failure, Success}
 // to work around https://github.com/scalatest/scalatest/issues/556
 case class UnexpectedStatusCodeException(requestMethod: String, requestUrl: String, statusCode: Int, responseBody: String)
     extends Exception(s"Request: $requestMethod $requestUrl; Unexpected status code ($statusCode): $responseBody")
+
+case class GrpcStatusRuntimeException(apiError: ApiError) extends
+  Exception(s"io.grpc.StatusRuntimeException: ${GRPCErrors.toStatusException(apiError).getStatus} State check failed. Reason: Assets should be issued before they can be traded")
 
 case class Status(blockchainHeight: Int, stateHeight: Int, updatedTimestamp: Long, updatedDate: String)
 object Status {

@@ -5,17 +5,11 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeoutException
 
 import akka.http.scaladsl.model.StatusCodes.BadRequest
-<<<<<<< HEAD
 import com.google.protobuf.ByteString
 import com.google.protobuf.wrappers.StringValue
 import com.wavesplatform.account.{AddressOrAlias, AddressScheme, KeyPair}
-import com.wavesplatform.api.grpc.{AccountsApiGrpc, BlockRangeRequest, BlockRequest, BlocksApiGrpc}
-=======
-import com.google.protobuf.wrappers.StringValue
-import com.wavesplatform.account.{AddressOrAlias, AddressScheme, KeyPair}
-import com.wavesplatform.api.grpc.AccountsApiGrpc
->>>>>>> e76fa7c9f6d94017f08628cd0c110edf6ae8a469
-import com.wavesplatform.api.http.AddressApiRoute
+import com.wavesplatform.api.grpc.{AccountsApiGrpc, BlockRangeRequest, BlockRequest, BlocksApiGrpc, TransactionsApiGrpc, TransactionsRequest}
+import com.wavesplatform.api.http.{AddressApiRoute, ApiError}
 import com.wavesplatform.api.http.RewardApiRoute.RewardStatus
 import com.wavesplatform.api.http.assets.{SignedIssueV1Request, SignedIssueV2Request}
 import com.wavesplatform.common.state.ByteStr
@@ -23,16 +17,21 @@ import com.wavesplatform.common.utils.{Base58, EitherExt2}
 import com.wavesplatform.features.api.{ActivationStatus, FeatureActivationStatus}
 import com.wavesplatform.http.DebugMessage
 import com.wavesplatform.it.Node
+import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.lang.script.Script
 import com.wavesplatform.lang.v1.compiler.Terms
 import com.wavesplatform.protobuf.block.PBBlocks
+import com.wavesplatform.protobuf.transaction.{PBTransactions, Recipient, VanillaTransaction}
 import com.wavesplatform.state.{AssetDistribution, AssetDistributionPage, DataEntry, Portfolio}
 import com.wavesplatform.transaction.Asset
 import com.wavesplatform.transaction.assets.IssueTransactionV2
+import com.wavesplatform.transaction.assets.exchange.{AssetPair, Order}
 import com.wavesplatform.transaction.lease.{LeaseCancelTransactionV2, LeaseTransactionV2}
 import com.wavesplatform.transaction.smart.InvokeScriptTransaction
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.Transfer
 import com.wavesplatform.transaction.transfer.TransferTransactionV2
+import io.grpc.{Metadata, StatusException, StatusRuntimeException, Status => GrpcStatus}
+import io.grpc.StatusRuntimeException._
 import org.asynchttpclient.Response
 import org.scalactic.source.Position
 import org.scalatest.{Assertion, Assertions, Matchers}
@@ -47,6 +46,7 @@ import scala.util.control.NonFatal
 
 object SyncHttpApi extends Assertions {
   case class ErrorMessage(error: Int, message: String)
+  case class GrpcError(status: GrpcStatus) extends Exception
   implicit val errorMessageFormat: Format[ErrorMessage] = Json.format
 
   def assertBadRequest[R](f: => R, expectedStatusCode: Int = 400): Assertion = Try(f) match {
@@ -68,7 +68,9 @@ object SyncHttpApi extends Assertions {
   def assertBadRequestAndMessage[R](f: => R, errorMessage: String, expectedStatusCode: Int = BadRequest.intValue): Assertion = Try(f) match {
     case Failure(UnexpectedStatusCodeException(_, _, statusCode, responseBody)) =>
       Assertions.assert(statusCode == expectedStatusCode && parse(responseBody).as[ErrorMessage].message.contains(errorMessage))
-    case Failure(e) => Assertions.fail(e)
+//    case Failure(GrpcStatusRuntimeException(ApiError.StateCheckFailed.)) => Assertions.assert()
+    case Failure(e) =>
+      Assertions.fail(e)
     case Success(s) => Assertions.fail(s"Expecting bad request but handle $s")
   }
 
@@ -78,6 +80,7 @@ object SyncHttpApi extends Assertions {
     try Await.result(awaitable, atMost)
     catch {
       case usce: UnexpectedStatusCodeException => throw usce
+      case gsre: GrpcStatusRuntimeException    => throw gsre
       case te: TimeoutException                => throw te
       case NonFatal(cause)                     => throw new Exception(cause)
     }
@@ -173,24 +176,13 @@ object SyncHttpApi extends Assertions {
         reissuable: Boolean,
         fee: Long,
         script: Option[String],
+        version: Int = 2,
         waitForTx: Boolean = false
     ): Transaction = {
-      val tx = IssueTransactionV2
-        .selfSigned(
-          chainId = AddressScheme.current.chainId,
-          sender = source,
-          name = name.getBytes(StandardCharsets.UTF_8),
-          description = description.getBytes(StandardCharsets.UTF_8),
-          quantity = quantity,
-          decimals = decimals,
-          reissuable = reissuable,
-          script = script.map(x => Script.fromBase64String(x).explicitGet()),
-          fee = fee,
-          timestamp = System.currentTimeMillis()
-        )
-        .explicitGet()
-
-      maybeWaitForTransaction(sync(async(n).broadcastRequest(tx.json())), wait = waitForTx)
+      val useGrpc = sys.props.get("invoked_api").contains("grpc")
+      if (useGrpc) {
+        maybeWaitForTransaction(sync(async(n).grpc.broadcastIssue(source, name, description, quantity, decimals, reissuable, fee, script, version)), waitForTx)
+      } else maybeWaitForTransaction(sync(async(n).broadcastIssue(source, name, description, quantity, decimals, reissuable, fee, script, version)), waitForTx)
     }
 
     def issue(
@@ -320,6 +312,22 @@ object SyncHttpApi extends Assertions {
       maybeWaitForTransaction(sync(async(n).broadcastRequest(tx.json())), wait = waitForTx)
     }
 
+    def exchange(matcher: KeyPair,
+                 buyOrder: Order,
+                 sellOrder: Order,
+                 amount: Long,
+                 price: Long,
+                 buyMatcherFee: Long,
+                 sellMatcherFee: Long,
+                 fee: Long,
+                 timestamp: Long,
+                 version: Byte,
+                 matcherFeeAssetId: String = "WAVES",
+                 waitForTx: Boolean = false
+                ): Transaction = {
+      maybeWaitForTransaction(sync(async(n).grpc.exchange(matcher,buyOrder,sellOrder,amount,price,buyMatcherFee,sellMatcherFee,fee,timestamp,version,matcherFeeAssetId)), wait = waitForTx)
+    }
+
     def lease(
         sourceAddress: String,
         recipient: String,
@@ -409,7 +417,20 @@ object SyncHttpApi extends Assertions {
     def height: Int =
       sync(async(n).height)
 
-    def blockAt(height: Int): Block = sync(async(n).blockAt(height))
+    def blockAt(height: Int): Block = {
+      val useGrpc = sys.props.get("invoked_api").contains("grpc")
+      if (useGrpc) {
+        println("grpc used")
+        sync(async(n).grpc.blockAt(height))
+      } else sync(async(n).blockAt(height))
+    }
+
+    def blockAtTest(height: Int)/*: Block*/ = {
+      val useGrpc = sys.props.get("invoked_api").contains("grpc")
+      if (useGrpc) {
+        sync(async(n).grpc.blockAtTest(height)).fields foreach {case (key, value) => println (key + "-->" + value)}
+      } else println()/*sync(async(n).blockAt(height))*/
+    }
 
     def blockSeq(fromHeight: Int, toHeight: Int): Seq[Block] = sync(async(n).blockSeq(fromHeight, toHeight))
 
@@ -531,13 +552,69 @@ object SyncHttpApi extends Assertions {
   }
 
   class NodeExtGrpc(n: Node) {
+    import com.wavesplatform.it.api.AsyncHttpApi.{NodeAsyncHttpApi => async}
     import com.wavesplatform.account.{Address => Addr}
+    import com.wavesplatform.block.{Block => Blck, BlockHeader => BlckHeader}
+    import com.wavesplatform.transaction.{Transaction => Tx}
 
     private[this] lazy val accounts = AccountsApiGrpc.blockingStub(n.grpcChannel)
+    private[this] lazy val blocks = BlocksApiGrpc.blockingStub(n.grpcChannel)
+    private[this] lazy val transactions = TransactionsApiGrpc.blockingStub(n.grpcChannel)
 
     def resolveAlias(alias: String): Addr = {
       val addr = accounts.resolveAlias(StringValue.of(alias))
       Addr.fromBytes(addr.value.toByteArray).explicitGet()
+    }
+
+    def blockAt(height: Int): Blck = {
+      val block = blocks.getBlock(BlockRequest.of(includeTransactions = true, BlockRequest.Request.Height.apply(height))).getBlock
+      PBBlocks.vanilla(block).explicitGet()
+    }
+
+    def blockById(blockId: String): Blck = {
+      val block = blocks.getBlock(BlockRequest.of(includeTransactions = true, BlockRequest.Request.BlockId.apply(ByteString.copyFrom(Base58.decode(blockId))))).getBlock
+      PBBlocks.vanilla(block).explicitGet()
+    }
+
+    def blockSeq(fromHeight: Int, toHeight: Int): Seq[Blck] = {
+      val blockIter = blocks.getBlockRange(BlockRangeRequest.of(fromHeight, toHeight, includeTransactions = true, BlockRangeRequest.Filter.Empty))
+      blockIter.map(blockWithHeight => PBBlocks.vanilla(blockWithHeight.getBlock).explicitGet()).toSeq
+    }
+
+    def blockSeqByAddress(address: String, fromHeight: Int, toHeight: Int): Seq[Blck] = {
+      val blockIter = blocks.getBlockRange(BlockRangeRequest.of(fromHeight, toHeight, includeTransactions = true,
+        BlockRangeRequest.Filter.Generator.apply(ByteString.copyFrom(Base58.decode(address)))))
+      blockIter.map(blockWithHeight => PBBlocks.vanilla(blockWithHeight.getBlock).explicitGet()).toSeq
+    }
+
+    def blockHeaderAt(height: Int): BlckHeader = {
+      val block = blocks.getBlock(BlockRequest.of(includeTransactions = false, BlockRequest.Request.Height.apply(height))).getBlock
+      PBBlocks.vanilla(block).explicitGet().getHeader()
+    }
+
+    def blockHeaderById(blockId: String): BlckHeader = {
+      val block = blocks.getBlock(BlockRequest.of(includeTransactions = false, BlockRequest.Request.BlockId.apply(ByteString.copyFrom(Base58.decode(blockId))))).getBlock
+      PBBlocks.vanilla(block).explicitGet().getHeader()
+    }
+
+    def blockHeaderSeq(fromHeight: Int, toHeight: Int): Seq[BlckHeader] = {
+      val blockIter = blocks.getBlockRange(BlockRangeRequest.of(fromHeight, toHeight, includeTransactions = false, BlockRangeRequest.Filter.Empty))
+      blockIter.map(blockWithHeight => PBBlocks.vanilla(blockWithHeight.getBlock).explicitGet().getHeader()).toSeq
+    }
+
+    def blockHeaderSeqByAddress(address: String, fromHeight: Int, toHeight: Int): Seq[BlckHeader] = {
+      val blockIter = blocks.getBlockRange(BlockRangeRequest.of(fromHeight, toHeight, includeTransactions = false,
+        BlockRangeRequest.Filter.Generator.apply(ByteString.copyFrom(Base58.decode(address)))))
+      blockIter.map(blockWithHeight => PBBlocks.vanilla(blockWithHeight.getBlock).explicitGet().getHeader()).toSeq
+    }
+
+    def getTransactions(ids: Seq[String], sender: String, recipientAddress: String = ""): Seq[Either[ValidationError, Tx]] = {
+      val txIter = transactions.getTransactions(TransactionsRequest.of(
+        sender = ByteString.copyFrom(Base58.decode(sender)),
+        recipient = if (recipientAddress.equals("")) None else Some(Recipient.of(Recipient.Recipient.Address.apply(ByteString.copyFrom(Base58.decode(recipientAddress))))),
+        ids.map(tx => ByteString.copyFrom(Base58.decode(tx)))
+      ))
+      txIter.map(t => PBTransactions.vanilla(t.getTransaction)).toSeq
     }
   }
 }

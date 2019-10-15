@@ -125,7 +125,7 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
 
     val assetDescription = "my asset description"
 
-    val IssueTx: IssueTransactionV1 = IssueTransactionV1
+    val issueTx: IssueTransactionV1 = IssueTransactionV1
       .selfSigned(
         sender = buyer,
         name = "myasset".getBytes("UTF-8"),
@@ -139,9 +139,9 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
       .right
       .get
 
-    val assetId = IssueTx.id()
+    val assetId = issueTx.id()
 
-    sender.postJson("/transactions/broadcast", IssueTx.json())
+    sender.postJson("/transactions/broadcast", issueTx.json())
 
     nodes.waitForHeightAriseAndTxPresent(assetId.base58)
 
@@ -161,7 +161,7 @@ class ExchangeTransactionSuite extends BaseTransactionSuite with NTPTime {
 
       if (matcherFeeOrder1 == Waves && matcherFeeOrder2 != Waves) {
         assetBalanceBefore = sender.assetBalance(secondAddress, assetId.base58).balance
-        sender.transfer(buyer.stringRepr, seller.stringRepr, 100000, minFee, Some(assetId.base58), waitForTx = true)
+        sender.transfer(buyer.publicKey.toAddress.stringRepr, seller.publicKey.toAddress.stringRepr, 100000, minFee, Some(assetId.base58), waitForTx = true)
       }
 
       val buyPrice   = 500000
