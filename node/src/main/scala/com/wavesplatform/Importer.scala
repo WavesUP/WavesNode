@@ -50,6 +50,7 @@ object Importer extends ScorexLogging {
             var blocksToSkip  = startHeight - 1
             val blocksToApply = importHeight - startHeight + 1
 
+            db.suspendCompactions()
             log.info(s"Skipping $blocksToSkip block(s)")
 
             sys.addShutdownHook {
