@@ -18,7 +18,7 @@ import com.wavesplatform.lang.script.{Script, ScriptReader}
 import com.wavesplatform.state._
 import com.wavesplatform.transaction.{Transaction, TransactionParsers}
 import com.wavesplatform.utils.ScorexLogging
-import org.iq80.leveldb.{DB, Options, ReadOptions}
+import org.iq80.leveldb.{CompressionType, DB, Options, ReadOptions}
 
 package object database extends ScorexLogging {
   def openDB(path: String, recreate: Boolean = false): DB = {
@@ -27,6 +27,7 @@ package object database extends ScorexLogging {
     val options = new Options()
       .createIfMissing(true)
       .paranoidChecks(true)
+      .compressionType(CompressionType.SNAPPY)
 
     if (recreate) {
       LevelDBFactory.factory.destroy(file, options)
