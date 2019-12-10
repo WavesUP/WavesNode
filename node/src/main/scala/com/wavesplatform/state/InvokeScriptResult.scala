@@ -1,4 +1,5 @@
 package com.wavesplatform.state
+
 import cats.kernel.Monoid
 import com.google.protobuf.ByteString
 import com.wavesplatform.account.Address
