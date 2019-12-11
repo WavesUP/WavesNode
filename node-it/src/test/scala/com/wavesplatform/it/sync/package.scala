@@ -1,7 +1,9 @@
 package com.wavesplatform.it
 
+import com.wavesplatform.account.{KeyPair, PublicKey}
 import com.wavesplatform.api.http.ApiError.TransactionNotAllowedByAssetScript
 import com.wavesplatform.api.http.requests.IssueRequest
+import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.{Base58, EitherExt2}
 import com.wavesplatform.it.api.SyncHttpApi.AssertiveApiError
 import com.wavesplatform.it.util._
@@ -55,6 +57,11 @@ package object sync {
       TransactionNotAllowedByAssetScript.Message,
       TransactionNotAllowedByAssetScript.Code
     )
+
+  implicit class SignByKeyPair(kp: KeyPair) {
+    def sign(message: ByteStr): ByteStr = com.wavesplatform.crypto.sign(kp.privateKey, message)
+  }
+
 
   def createIssueRequest(tx: IssueTransaction): IssueRequest = {
     import tx._
