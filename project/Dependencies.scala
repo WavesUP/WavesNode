@@ -5,13 +5,13 @@ import sbt._
 //noinspection TypeAnnotation
 object Dependencies {
 
-  def akkaModule(module: String): ModuleID = "com.typesafe.akka" %% s"akka-$module" % "2.5.20"
+  def akkaModule(module: String): ModuleID = "com.typesafe.akka" %% s"akka-$module" % "2.5.27"
 
-  private def akkaHttpModule(module: String)               = "com.typesafe.akka"             %% module            % "10.1.8"
-  private def nettyModule(module: String)                  = "io.netty"                      % s"netty-$module"   % "4.1.33.Final"
+  private def akkaHttpModule(module: String)               = "com.typesafe.akka"             %% module            % "10.1.11"
+  private def nettyModule(module: String)                  = "io.netty"                      % s"netty-$module"   % "4.1.43.Final"
   private def kamonModule(module: String, v: String)       = "io.kamon"                      %% s"kamon-$module"  % v
   private def jacksonModule(group: String, module: String) = s"com.fasterxml.jackson.$group" % s"jackson-$module" % "2.9.8"
-  private def bouncyCastle(module: String)                 = "org.bouncycastle"              % s"$module-jdk15on" % "1.59"
+  private def bouncyCastle(module: String)                 = "org.bouncycastle"              % s"$module-jdk15on" % "1.64"
 
   private def catsModule(module: String)  = Def.setting("org.typelevel" %%% s"cats-$module"  % "2.0.0")
   private def monixModule(module: String) = Def.setting("io.monix"      %%% s"monix-$module" % "3.1.0")
@@ -20,17 +20,21 @@ object Dependencies {
 
   val akkaHttp                   = akkaHttpModule("akka-http")
   private val jacksonModuleScala = jacksonModule("module", "module-scala").withCrossVersion(CrossVersion.Binary())
-  private val googleGuava        = "com.google.guava" % "guava" % "27.0.1-jre"
-  private val kamonCore          = kamonModule("core", "1.1.5")
-  private val machinist          = "org.typelevel" %% "machinist" % "0.6.6"
+  private val googleGuava        = "com.google.guava" % "guava" % "28.1-jre"
+  private val kamonCore          = kamonModule("core", "1.1.6")
+  private val machinist          = "org.typelevel" %% "machinist" % "0.6.8"
   private val logback            = "ch.qos.logback" % "logback-classic" % "1.2.3"
-  val janino                     = "org.codehaus.janino" % "janino" % "3.0.12"
+  val janino                     = "org.codehaus.janino" % "janino" % "3.1.0"
 
   private val catsEffect = catsModule("effect")
   private val catsCore   = catsModule("core")
   private val shapeless  = Def.setting("com.chuusai" %%% "shapeless" % "2.3.3")
 
-  val scalaTest = "org.scalatest" %% "scalatest" % "3.0.6" % Test
+  private val scalacheck = "org.scalacheck" %% "scalacheck" % "1.14.2"
+
+  val mustacheCompiler = "com.github.spullara.mustache.java" % "compiler" % "0.9.6"
+
+  val scalaTest = "org.scalatest" %% "scalatest" % "3.0.8" % Test
 
   val enforcedVersions = Def.setting(
     Seq(
@@ -48,7 +52,7 @@ object Dependencies {
       jacksonModule("jaxrs", "jaxrs-base"),
       jacksonModule("jaxrs", "jaxrs-json-provider"),
       kamonCore,
-      "com.typesafe" % "config" % "1.3.3",
+      "com.typesafe" % "config" % "1.3.4",
       machinist, //.exclude("org.scala-js", "scalajs-library_2.12"), // ?
       "com.squareup.okhttp3" % "okhttp"      % "3.11.0",
       "com.squareup.okio"    % "okio"        % "1.14.0",
@@ -58,14 +62,15 @@ object Dependencies {
       bouncyCastle("bcprov"),
       "org.apache.httpcomponents" % "httpcore"         % "4.4.5",
       "org.javassist"             % "javassist"        % "3.21.0-GA",
-      "org.reactivestreams"       % "reactive-streams" % "1.0.2",
+      "org.reactivestreams"       % "reactive-streams" % "1.0.3",
       "org.scala-lang"            % "scala-library"    % scalaVersion.value,
       "org.scala-lang"            % "scala-reflect"    % scalaVersion.value,
       catsEffect.value,
       catsCore.value,
       catsModule("kernel").value,
       catsModule("macros").value,
-      shapeless.value
+      shapeless.value,
+      "com.lihaoyi" %%% "fastparse"   % "1.0.0"
     )
   )
 
@@ -85,13 +90,13 @@ object Dependencies {
         .exclude("org.typelevel", "cats-effect_sjs0.6_2.12")
         .exclude("org.scala-js", "scalajs-library_2.12"),
       catsCore.value.exclude("org.scala-js", "scalajs-library_2.12"),
-      ("org.rudogma" %%% "supertagged" % "1.4").exclude("org.scala-js", "scalajs-library_2.12"),
+      ("org.rudogma" %%% "supertagged" % "1.5").exclude("org.scala-js", "scalajs-library_2.12"),
       ("com.lihaoyi" %%% "fastparse"   % "1.0.0").exclude("org.scala-js", "scalajs-library_2.12"),
       shapeless.value.exclude("org.scala-js", "scalajs-library_2.12"),
       machinist.exclude("org.scala-js", "scalajs-library_2.12"),
       catsEffect.value.exclude("org.typelevel", "cats-core_sjs0.6_2.12"),
       ("org.typelevel" %% "cats-mtl-core" % "0.4.0").exclude("org.scalacheck", "scalacheck_2.12"),
-      "ch.obermuhlner"       % "big-math" % "2.1.0",
+      "ch.obermuhlner"       % "big-math" % "2.3.0",
       "org.scorexfoundation" %% "scrypto" % "2.0.4",
       ("org.bykn" %% "fastparse-cats-core" % "0.1.0")
         .exclude("org.scalatest", "scalatest_2.12")
@@ -100,23 +105,23 @@ object Dependencies {
       bouncyCastle("bcpkix"),
       bouncyCastle("bcprov"),
       kindProjector,
-      compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0-M4"),
-      "com.softwaremill.sttp" %%% "core" % "1.6.4"
+      compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
+      "com.softwaremill.sttp" %%% "core" % "1.7.2"
     ) ++ scalapbRuntime.value ++ circe.value
   )
 
   lazy val it = scalaTest +: Seq(
     logback,
     // Swagger is using Jersey 1.1, hence the shading (https://github.com/spotify/docker-client#a-note-on-shading)
-    ("com.spotify" % "docker-client" % "8.15.1").classifier("shaded"),
+    ("com.spotify" % "docker-client" % "8.16.0").classifier("shaded"),
     jacksonModule("dataformat", "dataformat-properties"),
-    "org.asynchttpclient" % "async-http-client" % "2.7.0",
-    "org.scalacheck"      %% "scalacheck"       % "1.14.0"
+    "org.asynchttpclient" % "async-http-client" % "2.10.4",
+    scalacheck
   ).map(_ % Test)
 
   lazy val test = scalaTest +: Seq(
     logback,
-    "org.scalacheck" %% "scalacheck" % "1.14.0",
+    scalacheck,
     ("io.github.amrhassan" %% "scalacheck-cats" % "0.4.0").exclude("org.scalacheck", "scalacheck_2.12"),
     "org.mockito"   % "mockito-all"                  % "1.10.19",
     "org.scalamock" %% "scalamock-scalatest-support" % "3.6.0"
@@ -131,17 +136,17 @@ object Dependencies {
   lazy val node = Def.setting(
     Seq(
       "commons-net"          % "commons-net" % "3.6",
-      "com.iheart"           %% "ficus" % "1.4.2",
+      "com.iheart"           %% "ficus" % "1.4.7",
       "net.logstash.logback" % "logstash-logback-encoder" % "4.11" % Runtime,
       kamonCore,
-      kamonModule("system-metrics", "1.0.0"),
-      kamonModule("influxdb", "1.0.2"),
-      "org.influxdb" % "influxdb-java" % "2.14",
+      kamonModule("system-metrics", "1.0.1"),
+      kamonModule("influxdb", "1.0.3"),
+      "org.influxdb" % "influxdb-java" % "2.17",
       googleGuava,
       "com.google.code.findbugs"     % "jsr305"             % "3.0.2" % Compile, // javax.annotation stubs
-      "com.typesafe.play"            %% "play-json"         % "2.7.1",
+      "com.typesafe.play"            %% "play-json"         % "2.7.4",
       "org.ethereum"                 % "leveldbjni-all"     % "1.18.3",
-      "com.github.swagger-akka-http" %% "swagger-akka-http" % "1.1.0",
+      "com.github.swagger-akka-http" %% "swagger-akka-http" % "1.1.1",
       "javax.xml.bind"               % "jaxb-api"           % "2.3.1", // javax.xml.bind replacement for JAXB in swagger
       akkaHttp,
       "org.bitlet"        % "weupnp" % "0.1.4",
@@ -177,7 +182,7 @@ object Dependencies {
   )
 
   lazy val circe = Def.setting {
-    val circeVersion = "0.12.0-RC4"
+    val circeVersion = "0.12.3"
     Seq(
       "io.circe" %%% "circe-core",
       "io.circe" %%% "circe-generic",

@@ -1,18 +1,16 @@
 resolvers ++= Seq(
-  "Typesafe repository" at "http://repo.typesafe.com/typesafe/releases/",
-  "Artima Maven Repository" at "http://repo.artima.com/releases",
-  "JBoss" at "https://repository.jboss.org",
-  Resolver.sbtPluginRepo("releases")
+  Resolver.sbtPluginRepo("releases"),
+  Resolver.typesafeRepo("releases")
 )
 
 // Should go before Scala.js
 addSbtPlugin("com.thesamet" % "sbt-protoc" % "0.99.19")
 
-libraryDependencies += "com.thesamet.scalapb" %% "compilerplugin" % "0.8.4"
+libraryDependencies += "com.thesamet.scalapb" %% "compilerplugin" % "0.9.6"
 
 Seq(
-  "com.eed3si9n"       % "sbt-assembly"              % "0.14.5",
-  "com.typesafe.sbt"   % "sbt-native-packager"       % "1.3.25",
+  "com.eed3si9n"       % "sbt-assembly"              % "0.14.10",
+  "com.typesafe.sbt"   % "sbt-native-packager"       % "1.5.1",
   "org.scalastyle"     %% "scalastyle-sbt-plugin"    % "1.0.0",
   "org.scoverage"      % "sbt-scoverage"             % "1.5.1",
   "se.marcuslonnberg"  % "sbt-docker"                % "1.4.1",

@@ -69,7 +69,7 @@ lazy val langDoc = project
   .in(file("lang/doc"))
   .dependsOn(langJVM)
   .settings(
-    libraryDependencies ++= Seq("com.github.spullara.mustache.java" % "compiler" % "0.9.5") ++ Dependencies.test
+    libraryDependencies ++= Dependencies.mustacheCompiler +: Dependencies.test
   )
 
 lazy val node             = project.dependsOn(langJVM, `lang-testkit` % "test")
@@ -102,7 +102,7 @@ lazy val root = (project in file("."))
 
 inScope(Global)(
   Seq(
-    scalaVersion := "2.12.9",
+    scalaVersion := "2.12.10",
     organization := "com.wavesplatform",
     organizationName := "Waves Platform",
     V.fallback := (1, 1, 5),

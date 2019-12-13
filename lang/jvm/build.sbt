@@ -10,5 +10,5 @@ developers := List(Developer("petermz", "Peter Zhelezniakov", "peterz@rambler.ru
 libraryDependencies ++=
   Seq(
     "org.scala-js"                      %% "scalajs-stubs" % "1.0.0" % Provided,
-    "com.github.spullara.mustache.java" % "compiler"       % "0.9.5"
+    Dependencies.mustacheCompiler
   )
