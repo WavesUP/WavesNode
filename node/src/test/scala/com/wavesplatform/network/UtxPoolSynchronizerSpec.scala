@@ -19,7 +19,7 @@ import scala.concurrent.duration._
 
 class UtxPoolSynchronizerSpec extends FreeSpec with Matchers with BeforeAndAfterAll {
   private[this] val timer     = new HashedWheelTimer
-  private[this] val scheduler = Schedulers.timeBoundedFixedPool(timer, 1.second, 2, "test-utx-sync")
+  private[this] val scheduler = Schedulers.timeBoundedFixedPool(timer, 1.second, 2, "test-utx-sync").executor
 
   "UtxPoolSynchronizer" - {
     def sleep(millis: Int)(tx: Transaction): TracedResult[ValidationError, Boolean] = {

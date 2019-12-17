@@ -8,6 +8,7 @@ import com.wavesplatform.settings.SynchronizationSettings.UtxSynchronizerSetting
 import com.wavesplatform.transaction.TxValidationError.GenericError
 import com.wavesplatform.transaction.smart.script.trace.TracedResult
 import com.wavesplatform.transaction.{LastBlockInfo, Transaction}
+import com.wavesplatform.utils.Schedulers.TimeBoundedScheduler
 import com.wavesplatform.utils.ScorexLogging
 import com.wavesplatform.utx.UtxPool
 import io.netty.channel.Channel
@@ -30,10 +31,11 @@ class UtxPoolSynchronizerImpl(
     broadcast: (Transaction, Option[Channel]) => Unit,
     blockSource: Observable[LastBlockInfo]
 )(
-    implicit val scheduler: Scheduler
+    implicit val scheduler: TimeBoundedScheduler
 ) extends UtxPoolSynchronizer
     with ScorexLogging
     with AutoCloseable {
+  import scheduler.implicitScheduler
 
   val queue = AsyncQueue.bounded[(Transaction, Channel)](settings.maxQueueSize)
 
@@ -59,8 +61,8 @@ class UtxPoolSynchronizerImpl(
     queue.tryOffer(tx -> source)
   }
 
-  private def validateFuture(tx: Transaction, allowRebroadcast: Boolean, source: Option[Channel]): Future[TracedResult[ValidationError, Boolean]] =
-    Future(putIfNew(tx))(scheduler)
+  private def createTxValidateFuture(tx: Transaction, allowRebroadcast: Boolean, source: Option[Channel]): Future[TracedResult[ValidationError, Boolean]] =
+    scheduler.createFutureWithTimeout(putIfNew(tx))
       .recover {
         case t =>
           log.warn(s"Error validating transaction ${tx.id()}", t)
@@ -71,20 +73,20 @@ class UtxPoolSynchronizerImpl(
       }
 
   override def publish(tx: Transaction): TracedResult[ValidationError, Boolean] =
-    Await.result(validateFuture(tx, settings.allowTxRebroadcasting, None), Duration.Inf)
+    Await.result(createTxValidateFuture(tx, settings.allowTxRebroadcasting, None), Duration.Inf)
 
   override def close(): Unit = cancelableFuture.cancel()
 
   private def pollTransactions(): CancelableFuture[Unit] = queue.poll().flatMap {
     case (tx, source) =>
-      validateFuture(tx, allowRebroadcast = false, Some(source))
+      createTxValidateFuture(tx, allowRebroadcast = false, Some(source))
       pollTransactions()
   }
 }
 
 object UtxPoolSynchronizer extends ScorexLogging {
   def apply(utx: UtxPool, settings: UtxSynchronizerSettings, allChannels: ChannelGroup, blockSource: Observable[LastBlockInfo])(
-      implicit sc: Scheduler
+      implicit sc: TimeBoundedScheduler
   ): UtxPoolSynchronizer = new UtxPoolSynchronizerImpl(settings, tx => utx.putIfNew(tx), (tx, ch) => allChannels.broadcast(tx, ch), blockSource)
 
 }

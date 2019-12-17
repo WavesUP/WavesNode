@@ -8,6 +8,7 @@ import monix.execution.schedulers.{ExecutorScheduler, SchedulerService}
 import monix.execution.{ExecutionModel, Features, UncaughtExceptionReporter}
 
 import scala.concurrent.duration._
+import scala.concurrent.{Future, Promise}
 
 /** Helper methods to create schedulers with custom DiscardPolicy */
 object Schedulers {
@@ -86,14 +87,17 @@ object Schedulers {
     override def compareTo(o: Delayed): Int     = delegate.compareTo(o)
     override def run(): Unit = {
       val workerThread = Thread.currentThread()
-      maybeScheduledTimeout = Some(timer.newTimeout(
-          (t: Timeout) => if (!t.isCancelled) {
-            workerThread.interrupt()
-            stop0Method.invoke(workerThread, new TimeoutException("Timeout executing task"))
-          },
+      maybeScheduledTimeout = Some(
+        timer.newTimeout(
+          (t: Timeout) =>
+            if (!t.isCancelled) {
+              workerThread.interrupt()
+              stop0Method.invoke(workerThread, new TimeoutException("Timeout executing task"))
+            },
           timeout.toMillis,
           MILLISECONDS
-      ))
+        )
+      )
       delegate.run()
       maybeScheduledTimeout.foreach(_.cancel())
       maybeScheduledTimeout = None
@@ -108,6 +112,18 @@ object Schedulers {
     override def get(timeout: Long, unit: TimeUnit): V = delegate.get(timeout, unit)
   }
 
+  final case class TimeBoundedScheduler(executor: ExecutorScheduler, timeout: FiniteDuration) {
+    implicit def implicitScheduler: SchedulerService = executor
+
+    def createFutureWithTimeout[T](f: => T): Future[T] = {
+      val promise = Promise[T]
+      val future  = Future(f)(executor)
+      future.onComplete(promise.tryComplete)(executor)
+      executor.scheduleOnce(timeout)(promise.tryFailure(new TimeoutException("Thread timed out")))
+      promise.future
+    }
+  }
+
   def timeBoundedFixedPool(
       timer: Timer,
       timeout: FiniteDuration,
@@ -116,7 +132,7 @@ object Schedulers {
       reporter: UncaughtExceptionReporter = UncaughtExceptionReporter.default,
       executionModel: ExecutionModel = ExecutionModel.Default,
       rejectedExecutionHandler: RejectedExecutionHandler = new DiscardOldestPolicy
-  ): SchedulerService = {
+  ): TimeBoundedScheduler = {
     val factory = threadFactory(name, daemonic = true, reporter)
     val executor = new ScheduledThreadPoolExecutor(poolSize, factory, rejectedExecutionHandler) with AdaptedThreadPoolExecutorMixin {
       override def reportFailure(t: Throwable): Unit = reporter.reportFailure(t)
@@ -126,6 +142,6 @@ object Schedulers {
         new TimedWrapper(timer, timeout, task)
     }
 
-    ExecutorScheduler(executor, reporter, executionModel, Features.empty)
+    TimeBoundedScheduler(ExecutorScheduler(executor, reporter, executionModel, Features.empty), timeout)
   }
 }
