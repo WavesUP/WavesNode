@@ -99,7 +99,7 @@ object Importer extends ScorexLogging {
             log.error(s"Failed to open file '$blockchainFile", error)
         }
 
-        Await.result(Kamon.stopAllReporters(), 10.seconds)
+        Await.result(Kamon.stopModules(), 10.seconds)
         time.close()
     }
   }
