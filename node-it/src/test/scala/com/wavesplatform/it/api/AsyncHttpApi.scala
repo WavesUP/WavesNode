@@ -35,6 +35,7 @@ import com.wavesplatform.transaction.smart.{InvokeScriptTransaction, SetScriptTr
 import com.wavesplatform.transaction.transfer.MassTransferTransaction.Transfer
 import com.wavesplatform.transaction.transfer._
 import com.wavesplatform.transaction.{CreateAliasTransaction, DataTransaction, TxVersion}
+import com.wavesplatform.transaction.assets.exchange.{Order, ExchangeTransaction => ExchangeTx}
 import io.grpc.stub.StreamObserver
 import monix.eval.Task
 import monix.reactive.subjects.ConcurrentSubject
@@ -61,6 +62,15 @@ object AsyncHttpApi extends Assertions {
     def get(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] =
       retrying(f(_get(s"${n.nodeApiEndpoint}$path")).build())
 
+    def getWithCustomHeader(path: String, headerName: String, headerValue: String, withApiKey: Boolean = false, f: RequestBuilder => RequestBuilder = identity): Future[Response] = {
+      val requestBuilder = if (withApiKey) {
+        _get(s"${n.nodeApiEndpoint}$path").setHeader(headerName, headerValue).withApiKey(n.apiKey)
+      } else {
+        _get(s"${n.nodeApiEndpoint}$path").setHeader(headerName, headerValue)
+      }
+      retrying(f(requestBuilder).build())
+    }
+
     def delete(path: String, f: RequestBuilder => RequestBuilder = identity): Future[Response] =
       retrying(f(_delete(s"${n.nodeApiEndpoint}$path")).withApiKey(n.apiKey).build())
 
@@ -84,6 +94,15 @@ object AsyncHttpApi extends Assertions {
       _post(s"${n.nodeApiEndpoint}$path")
         .withApiKey(n.apiKey)
         .setHeader("Content-type", "application/json")
+        .setBody(stringify(body))
+        .build()
+    }
+
+    def postJsObjectWithCustomHeader(path: String, body: JsValue, headerName: String, headerValue: String): Future[Response] = retrying {
+      _post(s"${n.nodeApiEndpoint}$path")
+        .withApiKey(n.apiKey)
+        .setHeader("Content-type", "application/json")
+        .setHeader(headerName, headerValue)
         .setBody(stringify(body))
         .build()
     }
@@ -270,6 +289,36 @@ object AsyncHttpApi extends Assertions {
           "feeAssetId" -> { if (feeAssetId.isDefined) JsString(feeAssetId.get) else JsNull }
         )
       )
+    }
+
+    def broadcastExchange(matcher: KeyPair,
+                 buyOrder: Order,
+                 sellOrder: Order,
+                 amount: Long,
+                 price: Long,
+                 buyMatcherFee: Long,
+                 sellMatcherFee: Long,
+                 fee: Long,
+                 version: Byte,
+                 matcherFeeAssetId: Option[String]): Future[Transaction] = {
+      val tx = ExchangeTx
+        .signed(
+          matcher = matcher,
+          buyOrder = buyOrder,
+          sellOrder = sellOrder,
+          amount = amount,
+          price = price,
+          buyMatcherFee = buyMatcherFee,
+          sellMatcherFee = sellMatcherFee,
+          fee = fee,
+          version = version,
+          timestamp = System.currentTimeMillis()
+        )
+        .right
+        .get
+        .json()
+
+      signedBroadcast(tx)
     }
 
     def payment(sourceAddress: String, recipient: String, amount: Long, fee: Long): Future[Transaction] =
