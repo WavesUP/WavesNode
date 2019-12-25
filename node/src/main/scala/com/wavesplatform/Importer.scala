@@ -4,6 +4,7 @@ import java.io._
 import java.net.URL
 
 import akka.actor.ActorSystem
+import com.google.common.base.Utf8
 import com.google.common.io.ByteStreams
 import com.google.common.primitives.Ints
 import com.wavesplatform.Exporter.Formats
@@ -19,6 +20,7 @@ import com.wavesplatform.protobuf.block.PBBlocks
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.appender.BlockAppender
 import com.wavesplatform.state.{Blockchain, BlockchainUpdated}
+import com.wavesplatform.transaction.assets.IssueTransaction
 import com.wavesplatform.transaction.{Asset, BlockchainUpdater, DiscardedBlocks, Transaction}
 import com.wavesplatform.utils._
 import com.wavesplatform.utx.{UtxPool, UtxPoolImpl}
@@ -196,14 +198,16 @@ object Importer extends ScorexLogging {
               if (importOptions.format == Formats.Binary) Block.parseBytes(buffer)
               else PBBlocks.vanilla(PBBlocks.addChainId(protobuf.block.PBBlock.parseFrom(buffer)), unsafe = true)
 
-            if (blockchainUpdater.lastBlockId.contains(block.header.reference)) {
-              Await.result(appendBlock(block).runAsyncLogErr, Duration.Inf) match {
-                case Left(ve) =>
-                  log.error(s"Error appending block: $ve")
-                  quit = true
-                case _ =>
-                  counter = counter + 1
-              }
+            def isValid(s: Array[Byte]) = {
+              val backConvSuccess = Try(ByteStr(new String(s, "UTF-8").getBytes) == ByteStr(s)).getOrElse(false)
+              Utf8.isWellFormed(s) && backConvSuccess
+            }
+
+            block.transactionData.foreach {
+              case it: IssueTransaction if !isValid(it.nameBytes) || !isValid(it.descriptionBytes) =>
+                println(s"Invalid: $it")
+
+              case _ => // Ignore
             }
           }
         } else {
