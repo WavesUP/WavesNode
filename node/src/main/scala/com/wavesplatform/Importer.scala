@@ -209,6 +209,7 @@ object Importer extends ScorexLogging {
 
               case _ => // Ignore
             }
+            counter += 1
           }
         } else {
           log.info(s"$s2 != expected $len")
@@ -218,6 +219,8 @@ object Importer extends ScorexLogging {
         log.info(s"Expecting to read ${Ints.BYTES} but got $s1 (${bis.available()})")
         quit = true
       }
+
+      if (counter % 100000 == 0) println(s"Read $counter")
     }
 
     val duration = System.currentTimeMillis() - start
