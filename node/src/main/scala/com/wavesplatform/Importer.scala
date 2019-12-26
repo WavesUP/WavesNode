@@ -199,7 +199,7 @@ object Importer extends ScorexLogging {
               else PBBlocks.vanilla(PBBlocks.addChainId(protobuf.block.PBBlock.parseFrom(buffer)), unsafe = true)
 
             def isValid(s: Array[Byte]) = {
-              val backConvSuccess = Try(ByteStr(new String(s, "UTF-8").getBytes) == ByteStr(s)).getOrElse(false)
+              val backConvSuccess = Try(ByteStr(new String(s, "UTF-8").getBytes("UTF-8")) == ByteStr(s)).getOrElse(false)
               Utf8.isWellFormed(s) && backConvSuccess
             }
 
