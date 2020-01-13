@@ -87,9 +87,9 @@ class UtxPoolSynchronizerImpl(
 
   private def pollTransactions(): Observable[_] =
     Observable
-      .repeatEval(queue.poll())
+      .repeatEval(Task.deferFuture(queue.poll()))
       .observeOn(Scheduler.global)
-      .concatMap(Observable.fromFuture(_))
+      .mapEval(identity)
       .map(Success(_))
       .onErrorRecover { case err => Failure(err) }
       .mapParallelUnordered(sys.runtime.availableProcessors()) {
