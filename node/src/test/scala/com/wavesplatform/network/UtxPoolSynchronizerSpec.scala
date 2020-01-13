@@ -2,7 +2,6 @@ package com.wavesplatform.network
 import java.util.concurrent.CountDownLatch
 
 import com.wavesplatform.account.PublicKey
-import com.wavesplatform.common.state.diffs.ProduceError._
 import com.wavesplatform.common.utils.EitherExt2
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.settings.SynchronizationSettings.UtxSynchronizerSettings
@@ -27,8 +26,7 @@ class UtxPoolSynchronizerSpec extends FreeSpec with Matchers with BeforeAndAfter
 
     def countTransactions(tx: Transaction): TracedResult[ValidationError, Boolean] = {
       if (counter.getAndDecrement() > 5)
-        while (!Thread.currentThread().isInterrupted) {}
-      else
+        while (!Thread.currentThread().isInterrupted) {} else
         latch.countDown()
 
       TracedResult(Right(true))
@@ -44,8 +42,7 @@ class UtxPoolSynchronizerSpec extends FreeSpec with Matchers with BeforeAndAfter
   }
 
   private def withUPS(putIfNew: Transaction => TracedResult[ValidationError, Boolean])(f: UtxPoolSynchronizer => Unit): Unit = {
-    val ups = new UtxPoolSynchronizerImpl(UtxSynchronizerSettings(1000, 2, 1000, true), putIfNew, { (_, _) =>
-    }, Observable.empty)(scheduler)
+    val ups = new UtxPoolSynchronizerImpl(UtxSynchronizerSettings(1000, 2, 1000, true), putIfNew, (_, _) => (), Observable.empty, scheduler)
     f(ups)
     ups.close()
   }
