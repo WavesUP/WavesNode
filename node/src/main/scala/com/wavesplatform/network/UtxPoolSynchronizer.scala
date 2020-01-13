@@ -12,6 +12,7 @@ import com.wavesplatform.utils.ScorexLogging
 import com.wavesplatform.utx.UtxPool
 import io.netty.channel.Channel
 import io.netty.channel.group.ChannelGroup
+import monix.eval.Task
 import monix.execution.{AsyncQueue, CancelableFuture, Scheduler}
 import monix.reactive.Observable
 
@@ -35,19 +36,17 @@ class UtxPoolSynchronizerImpl(
     with ScorexLogging
     with AutoCloseable {
 
-  val queue = AsyncQueue.bounded[(Transaction, Channel)](settings.maxQueueSize)
+  private[this] val queue = AsyncQueue.bounded[(Transaction, Channel)](settings.maxQueueSize)
 
-  val dummy = new Object()
-  val knownTransactions = CacheBuilder
+  private[this] val dummy = new Object()
+  private[this] val knownTransactions = CacheBuilder
     .newBuilder()
     .maximumSize(settings.networkTxCacheSize)
     .build[ByteStr, Object]
 
-  val cancelableFuture = pollTransactions()
-  cancelableFuture.onComplete {
-    case Success(_) => log.info("UtxPoolSynchronizer stopped")
-    case Failure(e) => log.warn("UtxPoolSynchronizer stopped abnormally", e)
-  }
+  private[this] val cancelable = pollTransactions()
+    .doOnComplete(Task(log.info("UtxPoolSynchronizer stopped")))
+    .doOnError(e => Task(log.warn("UtxPoolSynchronizer stopped abnormally", e))).subscribe()
 
   blockSource.map(_.height).distinctUntilChanged.foreach(_ => knownTransactions.invalidateAll())
 
@@ -82,18 +81,25 @@ class UtxPoolSynchronizerImpl(
   override def publish(tx: Transaction): TracedResult[ValidationError, Boolean] =
     Await.result(validateFuture(tx, settings.allowTxRebroadcasting, None), 10.seconds)
 
-  override def close(): Unit = cancelableFuture.cancel()
+  override def close(): Unit = cancelable.cancel()
 
-  private def pollTransactions(): CancelableFuture[Unit] = queue.poll().transformWith { result =>
-    result match {
-      case Success((tx, source)) =>
-        log.trace(s"Consuming transaction ${tx.id()} from $source")
-        validateFuture(tx, allowRebroadcast = false, Some(source))
-      case Failure(e) =>
-        log.warn(s"Error polling transaction queue", e)
-    }
-    pollTransactions()
-  }
+  private def pollTransactions(): Observable[_] =
+    Observable
+      .repeatEval(queue.poll())
+      .observeOn(scheduler)
+      .concatMap(Observable.fromFuture(_))
+      .map(Success(_))
+      .onErrorRecover { case err => Failure(err) }
+      .mapParallelUnordered(sys.runtime.availableProcessors()) {
+        case Success((tx, source)) =>
+          log.trace(s"Consuming transaction ${tx.id()} from $source")
+          Task.deferFuture(validateFuture(tx, allowRebroadcast = false, Some(source)))
+        case Failure(e) =>
+          log.warn(s"Error polling transaction queue", e)
+          Task.unit
+      }
+    .onErrorRecoverWith { case _ => Observable.empty }
+    .ignoreElements
 }
 
 object UtxPoolSynchronizer extends ScorexLogging {
