@@ -85,16 +85,25 @@ class UtxPoolSynchronizerImpl(
 
   override def close(): Unit = cancelable.cancel()
 
-  private def pollTransactions(): Observable[_] =
+  private def pollTransactions(): Observable[_] = {
+    @volatile
+    var queueLength = 0
+
+    timedScheduler.scheduleAtFixedRate(10 seconds, 10 seconds) {
+      if (queueLength > 0) log.trace(s"TX queue length = $queueLength")
+    }
+
     Observable
       .repeatEval(Task.deferFuture(queue.poll()))
       .observeOn(Scheduler.global)
       .mapEval(identity)
       .map(Success(_))
+      .doOnNext(_ => Task(queueLength += 1))
       .onErrorRecover { case err => Failure(err) }
       .mapParallelUnordered(sys.runtime.availableProcessors()) {
         case Success((tx, source)) =>
           log.trace(s"Consuming transaction ${tx.id()} from $source")
+          queueLength -= 1
           Task
             .deferFuture(validateFuture(tx, allowRebroadcast = false, Some(source)))
             .timeout(10 seconds)
@@ -104,6 +113,7 @@ class UtxPoolSynchronizerImpl(
       }
       .onErrorRecoverWith { case _ => Observable.empty }
       .ignoreElements
+  }
 }
 
 object UtxPoolSynchronizer extends ScorexLogging {
