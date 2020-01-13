@@ -107,11 +107,12 @@ class UtxPoolSynchronizerImpl(
           Task
             .deferFuture(validateFuture(tx, allowRebroadcast = false, Some(source)))
             .timeout(10 seconds)
+            .onErrorRecover { case err => TracedResult.wrapE(Left(GenericError(err.toString))) }
+
         case Failure(e) =>
           log.warn(s"Error polling transaction queue", e)
           Task.unit
       }
-      .onErrorRecoverWith { case _ => Observable.empty }
       .ignoreElements
   }
 }
