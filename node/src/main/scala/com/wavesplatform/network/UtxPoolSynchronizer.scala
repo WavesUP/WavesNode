@@ -85,7 +85,7 @@ class UtxPoolSynchronizerImpl(
       }
 
   override def publish(tx: Transaction): TracedResult[ValidationError, Boolean] =
-    Await.result(validateFuture(tx, settings.allowTxRebroadcasting, None), 10.seconds)
+    Await.result(validateFuture(tx, settings.allowTxRebroadcasting, None), Duration.Inf)
 
   override def close(): Unit = pollLoopCancelable.cancel()
 }
