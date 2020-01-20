@@ -1,7 +1,7 @@
 package com.wavesplatform.it.sync
 
 import com.typesafe.config.Config
-import com.wavesplatform.account.{KeyPair, PublicKey}
+import com.wavesplatform.account.{KeyPair, PrivateKey, PublicKey}
 import com.wavesplatform.block.Block
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.{Base58, EitherExt2}
@@ -21,9 +21,9 @@ import scala.util.Random
 
 class PoSSuite extends FunSuite with Matchers with NodesFromDocker with WaitForHeight2 with CancelAfterFailure {
 
-  val signerPK = KeyPair.fromSeed(nodeConfigs.last.getString("account-seed")).explicitGet()
+  private val signerPK = KeyPair.fromSeed(nodeConfigs.last.getString("account-seed")).explicitGet()
 
-  implicit val nxtCDataReads = Reads { json =>
+  private implicit val nxtCDataReads: Reads[NxtLikeConsensusBlockData] = Reads { json =>
     val bt = (json \ "base-target").as[Long]
     val gs = (json \ "generation-signature").as[String]
 
@@ -166,16 +166,19 @@ class PoSSuite extends FunSuite with Matchers with NodesFromDocker with WaitForH
           nodes.head
             .get(s"/blocks/at/$h")
             .getResponseBody
-        ) \ "signature").as[String])
+        ) \ "signature").as[String]
+      )
       .get
   }
+
+  private val vrfActivationHeight = 100
 
   override protected def nodeConfigs: Seq[Config] =
     NodeConfigs.newBuilder
       .overrideBase(_.quorum(3))
       .overrideBase(
         _.raw(
-          """
+          s"""
           |waves {
           |  blockchain {
           |    custom {
@@ -188,13 +191,15 @@ class PoSSuite extends FunSuite with Matchers with NodesFromDocker with WaitForH
           |          6 = 0
           |          7 = 0
           |          8 = 0
+          |          15 = $vrfActivationHeight
           |        }
           |      }
           |    }
           |  }
           |}
         """.stripMargin
-        ))
+        )
+      )
       .overrideBase(_.nonMiner)
       .withDefault(3)
       .withSpecial(_.raw("waves.miner.enable = yes"))
@@ -207,28 +212,53 @@ class PoSSuite extends FunSuite with Matchers with NodesFromDocker with WaitForH
     crypto.fastHash(s)
   }
 
-  def forgeBlock(height: Int, signerPK: KeyPair)(updateDelay: Long => Long = identity,
-                                                        updateBaseTarget: Long => Long = identity,
-                                                        updateGenSig: ByteStr => ByteStr = identity): Block = {
+  private def generationVrfSignature(hitSource: ByteStr, privateKey: PrivateKey): Array[Byte] = {
+    crypto.signVRF(privateKey, hitSource.arr).arr
+  }
+
+  private val hitSources = collection.mutable.Map[Int, ByteStr]()
+  private def hitSourceForHeight(height: Int, publicKey: PublicKey): ByteStr = {
+    val hitHeight = if (height > 100) height - 100 else height
+    hitSources.getOrElseUpdate(
+      height, {
+        val genSigAtHitHeight = blockInfo(hitHeight)._3.generationSignature
+        if (hitHeight == 1 || hitHeight < vrfActivationHeight) genSigAtHitHeight
+        else crypto.verifyVRF(genSigAtHitHeight, hitSourceForHeight(hitHeight - 1, publicKey), publicKey).explicitGet()
+      }
+    )
+  }
+
+  def forgeBlock(
+      height: Int,
+      signerPK: KeyPair
+  )(updateDelay: Long => Long = identity, updateBaseTarget: Long => Long = identity, updateGenSig: ByteStr => ByteStr = identity): Block = {
 
     val ggParentTS =
       if (height >= 3)
         Some(
           (Json
-            .parse(nodes.head.get(s"/blocks/at/${height - 2}").getResponseBody) \ "timestamp").as[Long])
+            .parse(nodes.head.get(s"/blocks/at/${height - 2}").getResponseBody) \ "timestamp").as[Long]
+        )
       else None
 
     val (lastBlockId, lastBlockTS, lastBlockCData) = blockInfo(height)
 
+    val hitSource = hitSourceForHeight(height, signerPK.publicKey).arr
+
     val genSig: ByteStr =
-      updateGenSig(
-        ByteStr(generatorSignature(lastBlockCData.generationSignature.arr, signerPK))
-      )
+      if (height < vrfActivationHeight)
+        updateGenSig(
+          ByteStr(generatorSignature(hitSource, signerPK))
+        )
+      else
+        updateGenSig(
+          ByteStr(generationVrfSignature(hitSource, signerPK.privateKey))
+        )
 
     val validBlockDelay: Long = updateDelay(
       FairPoSCalculator
         .calculateDelay(
-          hit(genSig.arr),
+          hit(genSig),
           lastBlockCData.baseTarget,
           nodes.head.accountBalances(signerPK.stringRepr)._2
         )
