@@ -26,6 +26,7 @@
     <property name="logback.file.enabled" value="true"/>
     <property name="logback.stdout.enabled" value="true"/>
     <property name="logback.utx-trace.enabled" value="false"/>
+    <property name="logback.balance-history-trace.enabled" value="false"/>
 
     <include optional="true" file="${waves.config.directory:-.}/logback.xml"/>
 
@@ -70,6 +71,21 @@
 
             <logger name="com.wavesplatform.utx.UtxPoolImpl.trace" additivity="false" level="TRACE">
                 <appender-ref ref="UTX-TRACE"/>
+            </logger>
+        </then>
+    </if>
+
+    <if condition='property("logback.balance-history-trace.enabled").contains("true")'>
+        <then>
+            <property name="appender.name" value="BALANCE-HISTORY"/>
+            <property name="appender.file" value="balance-history"/>
+            <property name="appender.level" value="TRACE"/>
+            <property name="appender.pattern" value="&quot;%date&quot;,%.25thread,%msg%n"/>
+
+            <include resource="file-appender-template.xml"/>
+
+            <logger name="leveldb.balance-history" additivity="false" level="TRACE">
+                <appender-ref ref="BALANCE-HISTORY"/>
             </logger>
         </then>
     </if>

@@ -4,7 +4,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.util
 
-import com.google.common.primitives.{Longs, Shorts}
+import com.google.common.primitives.{Ints, Longs, Shorts}
 import com.wavesplatform.account.Address
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.{Base58, Base64, EitherExt2}
@@ -364,6 +364,21 @@ object Explorer extends ScorexLogging {
               case (IssuedAsset(assetId), bal) =>
                 if (bal > 0)
                   println(s"$assetId : $bal")
+            }
+          }
+
+        case "FWB" =>
+          val balance = argument(1, "balance").toLong
+          val height = argument(2, "height").toInt
+          println(s"Looking for waves balance $balance at $height")
+
+          db.iterateOver(6.toShort) { e =>
+            if (Longs.fromByteArray(e.getValue) == balance) {
+              val actualHeight = Ints.fromByteArray(e.getKey.slice(2, 6))
+              val addressId = BigInt(e.getKey.drop(6))
+              val address = db.get(Keys.idToAddress(addressId))
+              val idOfAddress = db.get(Keys.addressId(address))
+              println(s"$address (id=$addressId, idOfAddress=$idOfAddress): actual height = $actualHeight")
             }
           }
       }

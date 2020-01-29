@@ -24,5 +24,6 @@ class RW(db: DB, readOptions: ReadOptions, batch: WriteBatch) extends ReadOnlyDB
 
   def delete[V](key: Key[V]): Unit = batch.delete(key.keyBytes)
 
-  def filterHistory(key: Key[Seq[Int]], heightToRemove: Int): Unit = put(key, get(key).filterNot(_ == heightToRemove))
+  def filterHistory(key: Key[Seq[Int]], heightToRemove: Int): Unit = filterHistory(get(key), key, heightToRemove)
+  def filterHistory(history: Seq[Int], key: Key[Seq[Int]], heightToRemove: Int): Unit = put(key, history.filterNot(_ == heightToRemove))
 }

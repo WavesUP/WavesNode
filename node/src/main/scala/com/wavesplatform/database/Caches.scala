@@ -233,9 +233,6 @@ abstract class Caches(spendableBalanceChanged: Observer[(Address, Asset)]) exten
 
     lastAddressId += newAddressIds.size
 
-    log.trace(s"CACHE newAddressIds = $newAddressIds")
-    log.trace(s"CACHE lastAddressId = $lastAddressId")
-
     val wavesBalances        = Map.newBuilder[BigInt, Long]
     val assetBalances        = Map.newBuilder[BigInt, Map[IssuedAsset, Long]]
     val leaseBalances        = Map.newBuilder[BigInt, LeaseBalance]

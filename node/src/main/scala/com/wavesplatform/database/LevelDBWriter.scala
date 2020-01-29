@@ -29,6 +29,7 @@ import com.wavesplatform.transaction.transfer._
 import com.wavesplatform.utils.ScorexLogging
 import monix.reactive.Observer
 import org.iq80.leveldb.{DB, ReadOptions, Snapshot}
+import org.slf4j.LoggerFactory
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
@@ -57,10 +58,13 @@ object LevelDBWriter extends AddressTransactions.Prov[LevelDBWriter] with Distri
 
 
   implicit class ReadOnlyDBExt(val db: ReadOnlyDB) extends AnyVal {
-    def fromHistory[A](historyKey: Key[Seq[Int]], valueKey: Int => Key[A]): Option[A] =
+    def fromHistoryValue[A](history: Seq[Int], valueKey: Int => Key[A]): Option[A] =
       for {
-        lastChange <- db.get(historyKey).headOption
+        lastChange <- history.headOption
       } yield db.get(valueKey(lastChange))
+
+    def fromHistory[A](historyKey: Key[Seq[Int]], valueKey: Int => Key[A]): Option[A] =
+      fromHistoryValue(db.get(historyKey), valueKey)
 
     def hasInHistory(historyKey: Key[Seq[Int]], v: Int => Key[_]): Boolean =
       db.get(historyKey)
@@ -89,6 +93,13 @@ class LevelDBWriter(
     val dbSettings: DBSettings
 ) extends Caches(spendableBalanceChanged)
     with ScorexLogging {
+
+  private val BalanceHistoryLogger = LoggerFactory.getLogger("leveldb.balance-history")
+
+  private def traceBalanceHistory(action: String, balanceHistory: Seq[Int], address: Option[Address], addressId: BigInt, db: ReadOnlyDB): Unit = if (BalanceHistoryLogger.isTraceEnabled()) {
+    val loadedAddress = Try(db.get(Keys.idToAddress(addressId))).fold(_ => "N/A", _.toString)
+    BalanceHistoryLogger.trace(s"""$height,$action,${address.fold("N/A")(_.toString)},$addressId,$loadedAddress,${balanceHistory.mkString("\"", ",", "\"")}""")
+  }
 
   private[this] val balanceSnapshotMaxRollbackDepth: Int = dbSettings.maxRollbackDepth + 1000
   import LevelDBWriter._
@@ -169,7 +180,10 @@ class LevelDBWriter(
     addressId(req._1).fold(0L) { addressId =>
       req._2 match {
         case asset @ IssuedAsset(_) => db.fromHistory(Keys.assetBalanceHistory(addressId, asset), Keys.assetBalance(addressId, asset)).getOrElse(0L)
-        case Waves                  => db.fromHistory(Keys.wavesBalanceHistory(addressId), Keys.wavesBalance(addressId)).getOrElse(0L)
+        case Waves                  =>
+          val balanceHistory = db.get(Keys.wavesBalanceHistory(addressId))
+          traceBalanceHistory("R balance", balanceHistory, Some(req._1), addressId, db)
+          db.fromHistoryValue(balanceHistory, Keys.wavesBalance(addressId)).getOrElse(0L)
       }
     }
   }
@@ -183,11 +197,16 @@ class LevelDBWriter(
     addressId(address).fold(LeaseBalance.empty)(loadLeaseBalance(db, _))
   }
 
-  private[database] def loadLposPortfolio(db: ReadOnlyDB, addressId: BigInt) = Portfolio(
-    db.fromHistory(Keys.wavesBalanceHistory(addressId), Keys.wavesBalance(addressId)).getOrElse(0L),
-    loadLeaseBalance(db, addressId),
-    Map.empty
-  )
+  private[database] def loadLposPortfolio(db: ReadOnlyDB, addressId: BigInt) = {
+    val balanceHistory = db.get(Keys.wavesBalanceHistory(addressId))
+    traceBalanceHistory("R LPOS", balanceHistory, None, addressId, db)
+
+    Portfolio(
+      db.fromHistoryValue(balanceHistory, Keys.wavesBalance(addressId)).getOrElse(0L),
+      loadLeaseBalance(db, addressId),
+      Map.empty
+    )
+  }
 
   override protected def loadAssetDescription(asset: IssuedAsset): Option[AssetDescription] = readOnly { db =>
     transactionInfo(asset.id, db) match {
@@ -223,13 +242,22 @@ class LevelDBWriter(
   override def blockReward(height: Int): Option[Long] =
     readOnly(_.db.get(Keys.blockReward(height)))
 
+  private def partitionHistory(history: Seq[Int], threshold: Int): (Seq[Int], Seq[Int]) = {
+    val (c1, c2) = history.partition(_ > threshold)
+    ((height +: c1) ++ c2.headOption) -> c2.drop(1)
+  }
+
   private def updateHistory(rw: RW, key: Key[Seq[Int]], threshold: Int, kf: Int => Key[_]): Seq[Array[Byte]] =
     updateHistory(rw, rw.get(key), key, threshold, kf)
 
-  private def updateHistory(rw: RW, history: Seq[Int], key: Key[Seq[Int]], threshold: Int, kf: Int => Key[_]): Seq[Array[Byte]] = {
-    val (c1, c2) = history.partition(_ > threshold)
-    rw.put(key, (height +: c1) ++ c2.headOption)
-    c2.drop(1).map(kf(_).keyBytes)
+  private def updateHistory(rw: RW, history: Seq[Int], historyKey: Key[Seq[Int]], threshold: Int, kf: Int => Key[_]): Seq[Array[Byte]] = {
+    val (toKeep, toRemove) = partitionHistory(history, threshold)
+    updateHistory(rw, toKeep, toRemove, historyKey, kf)
+  }
+
+  private def updateHistory(rw: RW, toKeep: Seq[Int], toRemove: Seq[Int], historyKey: Key[Seq[Int]],  kf: Int => Key[_]): Seq[Array[Byte]] = {
+    rw.put(historyKey, toKeep)
+    toRemove.map(kf(_).keyBytes)
   }
 
   //noinspection ScalaStyle
@@ -281,10 +309,8 @@ class LevelDBWriter(
 
     for ((address, id) <- newAddresses) {
       rw.put(Keys.addressId(address), Some(id))
-      log.trace(s"WRITE ${address.stringRepr} -> $id")
       rw.put(Keys.idToAddress(id), address)
     }
-    log.trace(s"WRITE lastAddressId = $lastAddressId")
 
     val threshold        = height - dbSettings.maxRollbackDepth
     val balanceThreshold = height - balanceSnapshotMaxRollbackDepth
@@ -293,11 +319,14 @@ class LevelDBWriter(
     val updatedBalanceAddresses = for ((addressId, balance) <- wavesBalances) yield {
       val kwbh = Keys.wavesBalanceHistory(addressId)
       val wbh  = rw.get(kwbh)
+      traceBalanceHistory("R updated", wbh, None, addressId, rw)
       if (wbh.isEmpty) {
         newAddressesForWaves += addressId
       }
       rw.put(Keys.wavesBalance(addressId)(height), balance)
-      expiredKeys ++= updateHistory(rw, wbh, kwbh, balanceThreshold, Keys.wavesBalance(addressId))
+      val (toKeep, toRemove) = partitionHistory(wbh, balanceThreshold)
+      traceBalanceHistory("W updated", toKeep, newAddresses.collectFirst { case (addr, `addressId`) => addr }, addressId, rw)
+      expiredKeys ++= updateHistory(rw, toKeep, toRemove, kwbh, Keys.wavesBalance(addressId)(_))
       addressId
     }
 
@@ -508,7 +537,12 @@ class LevelDBWriter(
             }
 
             rw.delete(Keys.wavesBalance(addressId)(currentHeight))
-            rw.filterHistory(Keys.wavesBalanceHistory(addressId), currentHeight)
+            val balanceHistory = rw.get(Keys.wavesBalanceHistory(addressId))
+            traceBalanceHistory("R rollback", balanceHistory, None, addressId, rw)
+            val filteredBalanceHistory = balanceHistory.filterNot(_ == currentHeight)
+            traceBalanceHistory("W rollback", filteredBalanceHistory, None, addressId, rw)
+            rw.put(Keys.wavesBalanceHistory(addressId), filteredBalanceHistory)
+
 
             rw.delete(Keys.leaseBalance(addressId)(currentHeight))
             rw.filterHistory(Keys.leaseBalanceHistory(addressId), currentHeight)
@@ -614,10 +648,7 @@ class LevelDBWriter(
         ordersToInvalidate.result().foreach(discardVolumeAndFee)
         scriptsToDiscard.result().foreach(discardScript)
         assetScriptsToDiscard.result().foreach(discardAssetScript)
-        accountDataToInvalidate.result().foreach {
-          case ak @ (addr, _) =>
-            discardAccountData(ak)
-        }
+        accountDataToInvalidate.result().foreach(discardAccountData)
         discardedBlock
       }
 
@@ -710,7 +741,9 @@ class LevelDBWriter(
     db.get(Keys.addressId(address)).flatMap { addressId =>
       assetId match {
         case Waves =>
-            closest(db.get(Keys.wavesBalanceHistory(addressId)), height).map { wh =>
+          val wavesBalanceHistory = db.get(Keys.wavesBalanceHistory(addressId))
+          traceBalanceHistory("R only snapshots", wavesBalanceHistory, Some(address), addressId, db)
+          closest(wavesBalanceHistory, height).map { wh =>
               val b: Long = db.get(Keys.wavesBalance(addressId)(wh))
               (wh, b)
             }
@@ -727,6 +760,7 @@ class LevelDBWriter(
     db.get(Keys.addressId(address)).fold(Seq(BalanceSnapshot(1, 0, 0, 0))) { addressId =>
       val toHeigth = this.heightOf(to).getOrElse(this.height)
       val wbh      = slice(db.get(Keys.wavesBalanceHistory(addressId)), from, toHeigth)
+      traceBalanceHistory("R snapshots", wbh, Some(address), addressId, db)
       val lbh      = slice(db.get(Keys.leaseBalanceHistory(addressId)), from, toHeigth)
       for {
         (wh, lh) <- merge(wbh, lbh)
