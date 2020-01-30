@@ -136,7 +136,7 @@ class NarrowTransactionGenerator(settings: Settings, val accounts: Seq[KeyPair],
                       500,
                       ts,
                       Waves,
-                      500000L,
+                      5000000L,
                       Array.fill(random.nextInt(100))(random.nextInt().toByte)
                     )
                 )
