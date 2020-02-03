@@ -232,7 +232,7 @@ case class UtilsApiRoute(
   }
 
   @Path("/script/meta")
-  @ApiOperation(value = "Meta", notes = "Account's script meta", httpMethod = "POST", hidden = true)
+  @ApiOperation(value = "Meta", notes = "Account's script meta", httpMethod = "POST", hidden = true, response = classOf[Map[String, String]])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(
@@ -243,11 +243,6 @@ case class UtilsApiRoute(
         value = "Script code",
         example = "true"
       )
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "meta or error")
     )
   )
   def scriptMeta: Route = path("script" / "meta") {

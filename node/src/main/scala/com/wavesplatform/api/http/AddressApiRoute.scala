@@ -73,7 +73,7 @@ case class AddressApiRoute(
   }
 
   @Path("/scriptInfo/{address}/meta")
-  @ApiOperation(value = "Meta by address", notes = "Account's script meta", httpMethod = "GET", response = classOf[AccountScriptMeta])
+  @ApiOperation(value = "Meta by address", notes = "Account's script meta", httpMethod = "GET", response = classOf[AccountScriptMetaDesc])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(name = "address", value = "Address", required = true, dataType = "string", paramType = "path")
@@ -625,6 +625,8 @@ case class AddressApiRoute(
       case Failure(_) => complete(InvalidPublicKey)
     }
   }
+
+  private[this] case class AccountScriptMetaDesc(address: String, meta: Map[String, String])
 }
 
 object AddressApiRoute {
