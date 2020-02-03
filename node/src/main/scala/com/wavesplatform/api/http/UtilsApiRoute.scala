@@ -44,7 +44,7 @@ case class UtilsApiRoute(
   }
 
   @Path("/script/decompile")
-  @ApiOperation(value = "Decompile", notes = "Decompiles base64 script representation to string code", httpMethod = "POST")
+  @ApiOperation(value = "Decompile", notes = "Decompiles base64 script representation to string code", httpMethod = "POST", response = classOf[DecompiledScriptDesc])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(
@@ -55,11 +55,6 @@ case class UtilsApiRoute(
         value = "Script code",
         example = "true"
       )
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "string or error")
     )
   )
   def decompile: Route = path("script" / "decompile") {
@@ -90,7 +85,7 @@ case class UtilsApiRoute(
 
   @Deprecated
   @Path("/script/compile")
-  @ApiOperation(value = "Compile", notes = "Compiles string code to base64 script representation", httpMethod = "POST")
+  @ApiOperation(value = "Compile", notes = "Compiles string code to base64 script representation", httpMethod = "POST", response = classOf[CompiledScriptDesc])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(
@@ -101,11 +96,6 @@ case class UtilsApiRoute(
         value = "Script code",
         example = "true"
       )
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "base64 or error")
     )
   )
   def compile: Route = path("script" / "compile") {
@@ -130,7 +120,7 @@ case class UtilsApiRoute(
   }
 
   @Path("/script/compileCode")
-  @ApiOperation(value = "Compile script", notes = "Compiles string code to base64 script representation", httpMethod = "POST")
+  @ApiOperation(value = "Compile script", notes = "Compiles string code to base64 script representation", httpMethod = "POST", response = classOf[CompiledScriptDesc])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(
@@ -141,11 +131,6 @@ case class UtilsApiRoute(
         value = "Script code",
         example = "true"
       )
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "base64 or error")
     )
   )
   def compileCode: Route = path("script" / "compileCode") {
@@ -171,7 +156,7 @@ case class UtilsApiRoute(
   }
 
   @Path("/script/compileWithImports")
-  @ApiOperation(value = "Compile script", notes = "Compiles string code with imports to base64 script representation", httpMethod = "POST")
+  @ApiOperation(value = "Compile script", notes = "Compiles string code with imports to base64 script representation", httpMethod = "POST", response = classOf[CompiledScriptDesc])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(
@@ -181,11 +166,6 @@ case class UtilsApiRoute(
         paramType = "body",
         value = "Script code with imports"
       )
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "base64 or error")
     )
   )
   def compileWithImports: Route = path("script" / "compileWithImports") {
@@ -210,7 +190,7 @@ case class UtilsApiRoute(
   }
 
   @Path("/script/estimate")
-  @ApiOperation(value = "Estimate", notes = "Estimates compiled code in Base64 representation", httpMethod = "POST")
+  @ApiOperation(value = "Estimate", notes = "Estimates compiled code in Base64 representation", httpMethod = "POST", response = classOf[EstimateDesc])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(
@@ -221,11 +201,6 @@ case class UtilsApiRoute(
         value = "A compiled Base64 code",
         example = "AQa3b8tH"
       )
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "base64 or error")
     )
   )
   def estimate: Route = path("script" / "estimate") {
@@ -286,37 +261,22 @@ case class UtilsApiRoute(
   }
 
   @Path("/time")
-  @ApiOperation(value = "Time", notes = "Current Node time (UTC)", httpMethod = "GET")
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Json with time or error")
-    )
-  )
+  @ApiOperation(value = "Time", notes = "Current Node time (UTC)", httpMethod = "GET", response = classOf[TimeDesc])
   def time: Route = (path("time") & get) {
     complete(Json.obj("system" -> System.currentTimeMillis(), "NTP" -> timeService.correctedTime()))
   }
 
   @Path("/seed")
-  @ApiOperation(value = "Seed", notes = "Generate random seed", httpMethod = "GET")
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Seed")
-    )
-  )
+  @ApiOperation(value = "Seed", notes = "Generate random seed", httpMethod = "GET", response = classOf[SeedDesc])
   def seedRoute: Route = (path("seed") & get) {
     complete(seed(DefaultSeedSize))
   }
 
   @Path("/seed/{length}")
-  @ApiOperation(value = "Seed of specified length", notes = "Generate random seed of specified length", httpMethod = "GET")
+  @ApiOperation(value = "Seed of specified length", notes = "Generate random seed of specified length", httpMethod = "GET", response = classOf[SeedDesc])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(name = "length", value = "Seed length ", required = true, dataType = "integer", paramType = "path")
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Seed")
     )
   )
   def length: Route = (path("seed" / IntNumber) & get) { length =>
@@ -325,7 +285,7 @@ case class UtilsApiRoute(
   }
 
   @Path("/hash/secure")
-  @ApiOperation(value = "Hash", notes = "Return SecureCryptographicHash of specified message", httpMethod = "POST")
+  @ApiOperation(value = "Hash", notes = "Return SecureCryptographicHash of specified message", httpMethod = "POST", response = classOf[HashedMessageDesc])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(
@@ -335,11 +295,6 @@ case class UtilsApiRoute(
         paramType = "body",
         dataType = "string"
       )
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Json with error or json like {\"message\": \"your message\",\"hash\": \"your message hash\"}")
     )
   )
   def hashSecure: Route = (path("hash" / "secure") & post) {
@@ -349,7 +304,7 @@ case class UtilsApiRoute(
   }
 
   @Path("/hash/fast")
-  @ApiOperation(value = "Hash", notes = "Return FastCryptographicHash of specified message", httpMethod = "POST")
+  @ApiOperation(value = "Hash", notes = "Return FastCryptographicHash of specified message", httpMethod = "POST", response = classOf[HashedMessageDesc])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(
@@ -361,18 +316,13 @@ case class UtilsApiRoute(
       )
     )
   )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Json with error or json like {\"message\": \"your message\",\"hash\": \"your message hash\"}")
-    )
-  )
   def hashFast: Route = (path("hash" / "fast") & post) {
     entity(as[String]) { message =>
       complete(Json.obj("message" -> message, "hash" -> Base58.encode(crypto.fastHash(message))))
     }
   }
   @Path("/sign/{privateKey}")
-  @ApiOperation(value = "Hash", notes = "Return FastCryptographicHash of specified message", httpMethod = "POST")
+  @ApiOperation(value = "Hash", notes = "Return FastCryptographicHash of specified message", httpMethod = "POST", response = classOf[SignedMessageDesc])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(
@@ -392,11 +342,6 @@ case class UtilsApiRoute(
       )
     )
   )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Json with error or json like {\"message\": \"your message\",\"hash\": \"your message hash\"}")
-    )
-  )
   def sign: Route = (path("sign" / Segment) & post) { pk =>
     entity(as[String]) { message =>
       complete(
@@ -410,7 +355,7 @@ case class UtilsApiRoute(
   }
 
   @Path("/transactionSerialize")
-  @ApiOperation(value = "Serialize transaction", notes = "Serialize transaction", httpMethod = "POST")
+  @ApiOperation(value = "Serialize transaction", notes = "Serialize transaction", httpMethod = "POST", response = classOf[SerializedTransactionDesc])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(
@@ -422,15 +367,19 @@ case class UtilsApiRoute(
       )
     )
   )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Serialized transaction")
-    )
-  )
   def transactionSerialize: Route =
     path("transactionSerialize")(jsonPost[JsObject] { jsv =>
       parseOrCreateTransaction(jsv)(tx => Json.obj("bytes" -> tx.bodyBytes().map(_.toInt & 0xff)))
     })
+
+  private[this] case class DecompiledScriptDesc(script: String)
+  private[this] case class CompiledScriptDesc(script: String, complexity: Int, extraFee: Long)
+  private[this] case class EstimateDesc(script: String, scriptText: String, complexity: Int, extraFee: Long)
+  private[this] case class TimeDesc(system: Long, NTP: Long)
+  private[this] case class SeedDesc(seed: String)
+  private[this] case class SignedMessageDesc(message: String, signature: String)
+  private[this] case class HashedMessageDesc(message: String, hash: String)
+  private[this] case class SerializedTransactionDesc(bytes: Array[Byte])
 }
 
 object UtilsApiRoute {
