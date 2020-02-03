@@ -11,7 +11,6 @@ import cats.kernel.Monoid
 import com.typesafe.config.{ConfigObject, ConfigRenderOptions}
 import com.wavesplatform.account.Address
 import com.wavesplatform.api.http.ApiError.InvalidAddress
-import com.wavesplatform.api.http.SwaggerDefinitions.TransactionDesc
 import com.wavesplatform.api.http._
 import com.wavesplatform.api.http.swagger.SwaggerDocService.ApiKeyDefName
 import com.wavesplatform.block.Block.BlockId
@@ -24,7 +23,7 @@ import com.wavesplatform.network.{PeerDatabase, PeerInfo, _}
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.state.diffs.TransactionDiffer
 import com.wavesplatform.state.extensions.Distributions
-import com.wavesplatform.state.{Blockchain, LeaseBalance, NG, Portfolio, TransactionId}
+import com.wavesplatform.state.{Blockchain, InvokeScriptResult, LeaseBalance, NG, TransactionId}
 import com.wavesplatform.transaction.TxValidationError.InvalidRequestSignature
 import com.wavesplatform.transaction._
 import com.wavesplatform.transaction.smart.script.trace.TracedResult
@@ -473,7 +472,7 @@ case class DebugApiRoute(
     value = "Transaction state changes",
     notes = "Returns state changes made by the transaction",
     httpMethod = "GET",
-    response = classOf[TransactionDesc]
+    response = classOf[StateChangesDesc]
   )
   @ApiImplicitParams(
     Array(
@@ -502,7 +501,7 @@ case class DebugApiRoute(
     value = "List of transactions by address with state changes",
     notes = "Get list of transactions with state changes where specified address has been involved",
     httpMethod = "GET",
-    response = classOf[TransactionDesc],
+    response = classOf[StateChangesDesc],
     responseContainer = "List"
   )
   @ApiImplicitParams(
@@ -557,6 +556,7 @@ case class DebugApiRoute(
   private[this] case class RollbackResponseDesc(BlockId: String)
   private[this] case class ValidationDesc(valid: Boolean, validationTime: Int, trace: List[String])
   private[this] case class PortfolioDesc(balance: Long, lease: LeaseBalance, assets: AssetMapDesc)
+  private[this] case class StateChangesDesc(id: String, height: Int, stateChanges: InvokeScriptResult)
 }
 
 object DebugApiRoute {
