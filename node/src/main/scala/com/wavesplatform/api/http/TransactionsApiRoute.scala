@@ -5,7 +5,7 @@ import cats.implicits._
 import com.wavesplatform.account.Address
 import com.wavesplatform.api.common.CommonTransactionsApi
 import com.wavesplatform.api.http.ApiError._
-import com.wavesplatform.api.http.swagger.SwaggerDocService.apiKeyDefinitionName
+import com.wavesplatform.api.http.swagger.SwaggerDocService.ApiKeyDefName
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.http.BroadcastRoute
 import com.wavesplatform.network.UtxPoolSynchronizer
@@ -42,7 +42,7 @@ case class TransactionsApiRoute(
 
   private[this] val commonApi = new CommonTransactionsApi(blockchain, utx, wallet, utxPoolSynchronizer.publish)
 
-  override lazy val route: Route =
+  override lazy val route =
     pathPrefix("transactions") {
       unconfirmed ~ addressLimit ~ info ~ status ~ sign ~ calculateFee ~ signedBroadcast
     }
@@ -225,7 +225,7 @@ case class TransactionsApiRoute(
     value = "Sign a transaction",
     notes = "Sign a transaction with the sender's private key",
     httpMethod = "POST",
-    authorizations = Array(new Authorization(apiKeyDefinitionName)),
+    authorizations = Array(new Authorization(ApiKeyDefName)),
     response = classOf[TransactionDesc]
   )
   @ApiImplicitParams(

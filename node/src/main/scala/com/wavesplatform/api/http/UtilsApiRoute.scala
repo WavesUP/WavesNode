@@ -3,7 +3,7 @@ package com.wavesplatform.api.http
 import java.security.SecureRandom
 
 import akka.http.scaladsl.marshalling.ToResponseMarshallable
-import akka.http.scaladsl.server.{Directive1, ExceptionHandler, Route}
+import akka.http.scaladsl.server.Route
 import com.wavesplatform.account.PrivateKey
 import com.wavesplatform.api.http.ApiError.{ScriptCompilerError, TooBigArrayAllocation}
 import com.wavesplatform.common.utils._
@@ -14,14 +14,11 @@ import com.wavesplatform.lang.v1.estimator.ScriptEstimator
 import com.wavesplatform.settings.RestAPISettings
 import com.wavesplatform.state.diffs.FeeValidation
 import com.wavesplatform.transaction.smart.script.ScriptCompiler
-import com.wavesplatform.utils.{Schedulers, Time}
-import io.netty.util.HashedWheelTimer
+import com.wavesplatform.utils.Time
 import io.swagger.annotations._
 import javax.ws.rs.Path
 import monix.execution.Scheduler
 import play.api.libs.json._
-
-import scala.concurrent.duration._
 
 @Path("/utils")
 @Api(value = "/utils", description = "Useful functions", position = 3, produces = "application/json")
@@ -31,7 +28,8 @@ case class UtilsApiRoute(
     estimator: ScriptEstimator,
     limitedScheduler: Scheduler
 ) extends ApiRoute
-    with AuthRoute with TimeLimitedRoute {
+    with AuthRoute
+    with TimeLimitedRoute {
 
   import UtilsApiRoute._
 
@@ -302,7 +300,7 @@ case class UtilsApiRoute(
   @ApiOperation(value = "Seed", notes = "Generate random seed", httpMethod = "GET")
   @ApiResponses(
     Array(
-      new ApiResponse(code = 200, message = "Json with peer list or error")
+      new ApiResponse(code = 200, message = "Seed")
     )
   )
   def seedRoute: Route = (path("seed") & get) {
@@ -316,7 +314,11 @@ case class UtilsApiRoute(
       new ApiImplicitParam(name = "length", value = "Seed length ", required = true, dataType = "integer", paramType = "path")
     )
   )
-  @ApiResponse(code = 200, message = "Json with error message")
+  @ApiResponses(
+    Array(
+      new ApiResponse(code = 200, message = "Seed")
+    )
+  )
   def length: Route = (path("seed" / IntNumber) & get) { length =>
     if (length <= MaxSeedSize) complete(seed(length))
     else complete(TooBigArrayAllocation)
@@ -418,6 +420,11 @@ case class UtilsApiRoute(
         dataType = "string",
         value = "Transaction data including <a href='transaction-types.html'>type</a> and signature/proofs"
       )
+    )
+  )
+  @ApiResponses(
+    Array(
+      new ApiResponse(code = 200, message = "Serialized transaction")
     )
   )
   def transactionSerialize: Route =

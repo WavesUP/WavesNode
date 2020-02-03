@@ -8,7 +8,7 @@ import akka.http.scaladsl.server.Route
 import com.wavesplatform.account.{Address, PublicKey}
 import com.wavesplatform.api.common.CommonAccountApi
 import com.wavesplatform.api.http.ApiError._
-import com.wavesplatform.api.http.swagger.SwaggerDocService.apiKeyDefinitionName
+import com.wavesplatform.api.http.swagger.SwaggerDocService.ApiKeyDefName
 import com.wavesplatform.common.utils.{Base58, Base64}
 import com.wavesplatform.crypto
 import com.wavesplatform.http.BroadcastRoute
@@ -93,12 +93,16 @@ case class AddressApiRoute(
     value = "Delete",
     notes = "Remove the account with address {address} from the wallet",
     httpMethod = "DELETE",
-    authorizations = Array(new Authorization(apiKeyDefinitionName)),
-    response = classOf[DeletedDesc]
+    authorizations = Array(new Authorization(ApiKeyDefName))
   )
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(name = "address", value = "Address", required = true, dataType = "string", paramType = "path")
+    )
+  )
+  @ApiResponses(
+    Array(
+      new ApiResponse(code = 200, message = "Deletion result", response = classOf[DeletedDesc])
     )
   )
   def deleteAddress: Route = path(Segment) { address =>
@@ -117,7 +121,7 @@ case class AddressApiRoute(
     value = "Sign",
     notes = "Sign a message with a private key associated with {address}",
     httpMethod = "POST",
-    authorizations = Array(new Authorization(apiKeyDefinitionName)),
+    authorizations = Array(new Authorization(ApiKeyDefName)),
     response = classOf[Signed]
   )
   @ApiImplicitParams(
@@ -137,7 +141,7 @@ case class AddressApiRoute(
     value = "Sign",
     notes = "Sign a message with a private key associated with {address}",
     httpMethod = "POST",
-    authorizations = Array(new Authorization(apiKeyDefinitionName)),
+    authorizations = Array(new Authorization(ApiKeyDefName)),
     response = classOf[Signed]
   )
   @ApiImplicitParams(
@@ -157,7 +161,7 @@ case class AddressApiRoute(
     value = "Verify",
     notes = "Check a signature of a message signed by an account",
     httpMethod = "POST",
-    authorizations = Array(new Authorization(apiKeyDefinitionName)),
+    authorizations = Array(new Authorization(ApiKeyDefName)),
     response = classOf[ValidityCheckDesc]
   )
   @ApiImplicitParams(
@@ -168,7 +172,7 @@ case class AddressApiRoute(
         value = "Json with data",
         required = true,
         paramType = "body",
-        dataTypeClass = classOf[SignedMessage],
+        dataTypeClass = classOf[Signed],
         defaultValue =
           "{\n\t\"message\":\"Base58-encoded message\",\n\t\"signature\":\"Base58-encoded signature\",\n\t\"publickey\":\"Base58-encoded public key\"\n}"
       )
@@ -183,7 +187,7 @@ case class AddressApiRoute(
     value = "Verify text",
     notes = "Check a signature of a message signed by an account",
     httpMethod = "POST",
-    authorizations = Array(new Authorization(apiKeyDefinitionName)),
+    authorizations = Array(new Authorization(ApiKeyDefName)),
     response = classOf[ValidityCheckDesc]
   )
   @ApiImplicitParams(
@@ -194,7 +198,7 @@ case class AddressApiRoute(
         value = "Json with data",
         required = true,
         paramType = "body",
-        dataTypeClass = classOf[SignedMessage],
+        dataTypeClass = classOf[Signed],
         defaultValue =
           "{\n\t\"message\":\"Plain message\",\n\t\"signature\":\"Base58-encoded signature\",\n\t\"publickey\":\"Base58-encoded public key\"\n}"
       )
@@ -306,7 +310,7 @@ case class AddressApiRoute(
     value = "Seed",
     notes = "Export seed value for the {address}",
     httpMethod = "GET",
-    authorizations = Array(new Authorization(apiKeyDefinitionName)),
+    authorizations = Array(new Authorization(ApiKeyDefName)),
     response = classOf[SeedDesc]
   )
   @ApiImplicitParams(
@@ -445,7 +449,7 @@ case class AddressApiRoute(
     value = "Create",
     notes = "Create a new account in the wallet(if it exists)",
     httpMethod = "POST",
-    authorizations = Array(new Authorization(apiKeyDefinitionName)),
+    authorizations = Array(new Authorization(ApiKeyDefName)),
     response = classOf[AddressDesc]
   )
   def create: Route = (path("addresses") & post & withAuth) {
@@ -578,7 +582,7 @@ case class AddressApiRoute(
   }
 
   private def verifyPath(address: String, decode: Boolean): Route = withAuth {
-    jsonPost[SignedMessage] { m =>
+    jsonPost[Signed] { m =>
       if (Address.fromString(address).isLeft) {
         InvalidAddress
       } else {
@@ -586,7 +590,7 @@ case class AddressApiRoute(
         val msg: Try[Array[Byte]] =
           if (decode) if (m.message.startsWith("base64:")) Base64.tryDecode(m.message) else Base58.tryDecodeWithLimit(m.message, 2048)
           else Success(m.message.getBytes("UTF-8"))
-        verifySigned(msg, m.signature, m.publickey, address)
+        verifySigned(msg, m.signature, m.publicKey, address)
       }
     }
   }
@@ -632,25 +636,47 @@ object AddressApiRoute {
       @ApiModelProperty("Base58-encoded signature") signature: String
   )
 
-  implicit val signedFormat: Format[Signed] = Json.format
+  object Signed {
+    import play.api.libs.functional.syntax._
+
+    implicit val signedFormat: Format[Signed] = Format(
+      ((JsPath \ "message").read[String] and
+        ((JsPath \ "publickey")
+          .read[String]
+          .orElse((JsPath \ "publicKey").read[String]))
+        and (JsPath \ "signature").read[String])(Signed.apply _),
+      Json.writes[Signed]
+    )
+  }
 
   case class Balance(address: String, confirmations: Int, balance: Long)
 
-  implicit val balanceFormat: Format[Balance] = Json.format
+  object Balance {
+    implicit val balanceFormat: Format[Balance] = Json.format
+  }
 
   case class BalanceDetails(address: String, regular: Long, generating: Long, available: Long, effective: Long)
 
-  implicit val balanceDetailsFormat: Format[BalanceDetails] = Json.format
+  object BalanceDetails {
+    implicit val balanceDetailsFormat: Format[BalanceDetails] = Json.format
+  }
 
   case class AddressValidity(address: String, valid: Boolean)
 
-  implicit val validityFormat: Format[AddressValidity] = Json.format
+  object AddressValidity {
+    implicit val validityFormat: Format[AddressValidity] = Json.format
+  }
 
   case class AddressScriptInfo(address: String, script: Option[String], scriptText: Option[String], complexity: Long, extraFee: Long)
 
-  implicit val accountScriptInfoFormat: Format[AddressScriptInfo] = Json.format
+  object AddressScriptInfo {
+    implicit val accountScriptInfoFormat: Format[AddressScriptInfo] = Json.format
+  }
 
   case class AccountScriptMeta(address: String, meta: Option[Dic])
-  implicit lazy val accountScriptMetaWrites: Writes[AccountScriptMeta] = Json.writes[AccountScriptMeta]
-  implicit lazy val dicFormat: Writes[Dic]                             = metaConverter.foldRoot
+
+  object AccountScriptMeta {
+    implicit lazy val dicFormat: Writes[Dic]                             = metaConverter.foldRoot
+    implicit lazy val accountScriptMetaWrites: Writes[AccountScriptMeta] = Json.writes[AccountScriptMeta]
+  }
 }
