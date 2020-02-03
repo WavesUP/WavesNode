@@ -13,6 +13,7 @@ import com.google.common.base.Charsets
 import com.wavesplatform.account.Address
 import com.wavesplatform.api.common.{CommonAccountApi, CommonAssetsApi}
 import com.wavesplatform.api.http.ApiError._
+import com.wavesplatform.api.http.SwaggerDefinitions.TransactionDesc
 import com.wavesplatform.api.http._
 import com.wavesplatform.api.http.assets.AssetsApiRoute.DistributionParams
 import com.wavesplatform.common.state.ByteStr
@@ -61,16 +62,11 @@ case class AssetsApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSync
     }
 
   @Path("/balance/{address}/{assetId}")
-  @ApiOperation(value = "Asset's balance", notes = "Account's balance by given asset", httpMethod = "GET")
+  @ApiOperation(value = "Asset's balance", notes = "Account's balance by given asset", httpMethod = "GET", response = classOf[BalanceDesc])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(name = "address", value = "Address", required = true, dataType = "string", paramType = "path"),
       new ApiImplicitParam(name = "assetId", value = "Asset ID", required = true, dataType = "string", paramType = "path")
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Balance")
     )
   )
   def balance: Route =
@@ -78,7 +74,7 @@ case class AssetsApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSync
       complete(balanceJson(address, assetId))
     }
 
-  def assetDistributionTask(params: DistributionParams)(renderNumbersAsStrings: Boolean): Task[ToResponseMarshallable] = {
+  private[this] def assetDistributionTask(params: DistributionParams)(renderNumbersAsStrings: Boolean): Task[ToResponseMarshallable] = {
     val (asset, height, limit, maybeAfter) = params
 
     val distributionTask = Task.eval(
@@ -101,15 +97,15 @@ case class AssetsApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSync
 
   @Deprecated
   @Path("/{assetId}/distribution")
-  @ApiOperation(value = "Asset balance distribution", notes = "Asset balance distribution by account", httpMethod = "GET")
+  @ApiOperation(
+    value = "Asset balance distribution",
+    notes = "Asset balance distribution by account",
+    httpMethod = "GET",
+    response = classOf[BalanceDistributionDesc]
+  )
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(name = "assetId", value = "Asset ID", required = true, dataType = "string", paramType = "path")
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Distribution")
     )
   )
   def balanceDistribution: Route =
@@ -140,7 +136,8 @@ case class AssetsApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSync
   @ApiOperation(
     value = "Asset balance distribution at height",
     notes = "Asset balance distribution by account at specified height",
-    httpMethod = "GET"
+    httpMethod = "GET",
+    response = classOf[BalanceDistributionDesc]
   )
   @ApiImplicitParams(
     Array(
@@ -148,11 +145,6 @@ case class AssetsApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSync
       new ApiImplicitParam(name = "height", value = "Height", required = true, dataType = "integer", paramType = "path"),
       new ApiImplicitParam(name = "limit", value = "Number of addresses to be returned", required = true, dataType = "integer", paramType = "path"),
       new ApiImplicitParam(name = "after", value = "address to paginate after", required = false, dataType = "string", paramType = "query")
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Distribution")
     )
   )
   def balanceDistributionAtHeight: Route =
@@ -182,15 +174,10 @@ case class AssetsApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSync
     }
 
   @Path("/balance/{address}")
-  @ApiOperation(value = "Account's balance", notes = "Account's balances for all assets", httpMethod = "GET")
+  @ApiOperation(value = "Account's balance", notes = "Account's balances for all assets", httpMethod = "GET", response = classOf[AccountAssetsDesc])
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(name = "address", value = "Address", required = true, dataType = "string", paramType = "path")
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Balances")
     )
   )
   def balances: Route =
@@ -199,16 +186,16 @@ case class AssetsApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSync
     }
 
   @Path("/details/{assetId}")
-  @ApiOperation(value = "Information about an asset", notes = "Provides detailed information about given asset", httpMethod = "GET")
+  @ApiOperation(
+    value = "Information about an asset",
+    notes = "Provides detailed information about given asset",
+    httpMethod = "GET",
+    response = classOf[AssetDetailsDesc]
+  )
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(name = "assetId", value = "ID of the asset", required = true, dataType = "string", paramType = "path"),
       new ApiImplicitParam(name = "full", value = "false", required = false, dataType = "boolean", paramType = "query")
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Asset details")
     )
   )
   def details: Route =
@@ -219,17 +206,12 @@ case class AssetsApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSync
     }
 
   @Path("/nft/{address}/limit/{limit}")
-  @ApiOperation(value = "NFTs", notes = "Account's NFTs balance", httpMethod = "GET")
+  @ApiOperation(value = "NFTs", notes = "Account's NFTs balance", httpMethod = "GET", response = classOf[TransactionDesc], responseContainer = "List")
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(name = "address", value = "Address", required = true, dataType = "string", paramType = "path"),
       new ApiImplicitParam(name = "limit", value = "Number of tokens to be returned", required = true, dataType = "integer", paramType = "path"),
       new ApiImplicitParam(name = "after", value = "Id of token to paginate after", required = false, dataType = "string", paramType = "query")
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "NFTs balance")
     )
   )
   def nft: Route =
@@ -380,6 +362,34 @@ case class AssetsApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSync
         }
       )
     }).left.map(m => CustomValidationError(m))
+
+  private[this] case class BalanceDesc(address: String, assetId: String, balance: Long)
+  private[this] case class ScriptDetailsDesc(scriptComplexity: Int, script: String, scriptText: String)
+  private[this] case class AssetDetailsDesc(
+      assetId: String,
+      issueHeight: Int,
+      issueTimestamp: Long,
+      issuer: String,
+      name: String,
+      description: String,
+      decimals: Int,
+      reissuable: Boolean,
+      quantity: Long,
+      scripted: Boolean,
+      minSponsoredAssetFee: Long,
+      scriptDetails: ScriptDetailsDesc
+  )
+  private[this] case class AccountAssetDesc(
+      assetId: String,
+      balance: Long,
+      reissuable: Boolean,
+      minSponsoredAssetFee: Long,
+      sponsorBalance: Long,
+      quantity: Long,
+      issueTransaction: TransactionDesc
+  )
+  private[this] case class AccountAssetsDesc(address: String, balances: Seq[AccountAssetDesc])
+  private[this] case class BalanceDistributionDesc(hasNext: Boolean, last: String, values: Map[Address, String])
 }
 
 object AssetsApiRoute {

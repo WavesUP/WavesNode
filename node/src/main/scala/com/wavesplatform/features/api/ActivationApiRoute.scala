@@ -19,12 +19,7 @@ case class ActivationApiRoute(settings: RestAPISettings, featuresSettings: Featu
   }
 
   @Path("/status")
-  @ApiOperation(value = "Status", notes = "Get activation status", httpMethod = "GET")
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Json activation status")
-    )
-  )
+  @ApiOperation(value = "Status", notes = "Get activation status", httpMethod = "GET", response = classOf[ActivationStatus])
   def status: Route = (get & path("status")) {
     val height = blockchain.height
 

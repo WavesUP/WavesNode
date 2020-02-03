@@ -37,16 +37,12 @@ case class AliasApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSynch
   @ApiOperation(
     value = "Address by alias",
     notes = "Returns an address associated with an Alias. Alias should be plain text without an 'alias' prefix and network code.",
-    httpMethod = "GET"
+    httpMethod = "GET",
+    response = classOf[AddressResponseDesc]
   )
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(name = "alias", value = "Alias", required = true, dataType = "string", paramType = "path")
-    )
-  )
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Address")
     )
   )
   def addressOfAlias: Route = (get & path("by-alias" / Segment)) { aliasName =>
@@ -68,7 +64,7 @@ case class AliasApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSynch
   )
   @ApiResponses(
     Array(
-      new ApiResponse(code = 200, message = "Aliases")
+      new ApiResponse(code = 200, message = "Aliases", response = classOf[String], responseContainer = "Set")
     )
   )
   def aliasOfAddress: Route = (get & path("by-address" / Segment)) { addressString =>
@@ -78,4 +74,6 @@ case class AliasApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSynch
         .map(acc => blockchain.aliasesOfAddress(acc).map(_.stringRepr).toVector)
     }
   }
+
+  private[this] case class AddressResponseDesc(address: String)
 }
