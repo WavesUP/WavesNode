@@ -5,16 +5,6 @@ import io.swagger.annotations.{ApiModel, ApiModelProperty}
 import scala.annotation.meta.field
 
 object SwaggerDefinitions {
-
-  @ApiModel("Deleted")
-  case class DeletedDesc(deleted: Boolean)
-  @ApiModel("ValidityCheck")
-  case class ValidityCheckDesc(isValid: Boolean)
-  @ApiModel("Seed")
-  case class SeedDesc(address: String, seed: String)
-  @ApiModel("Address")
-  case class AddressDesc(address: String)
-
   @ApiModel("NxtConsensusData")
   class NxtConsensusDataDesc(
       @(ApiModelProperty @field)(name = "base-target", required = true)

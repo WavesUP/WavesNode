@@ -626,6 +626,10 @@ case class AddressApiRoute(
     }
   }
 
+  private[this] case class DeletedDesc(deleted: Boolean)
+  private[this] case class ValidityCheckDesc(isValid: Boolean)
+  private[this] case class SeedDesc(address: String, seed: String)
+  private[this] case class AddressDesc(address: String)
   private[this] case class AccountScriptMetaDesc(address: String, meta: Map[String, String])
 }
 
