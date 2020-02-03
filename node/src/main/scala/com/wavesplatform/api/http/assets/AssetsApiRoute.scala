@@ -13,7 +13,6 @@ import com.google.common.base.Charsets
 import com.wavesplatform.account.Address
 import com.wavesplatform.api.common.{CommonAccountApi, CommonAssetsApi}
 import com.wavesplatform.api.http.ApiError._
-import com.wavesplatform.api.http.SwaggerDefinitions.TransactionDesc
 import com.wavesplatform.api.http._
 import com.wavesplatform.api.http.assets.AssetsApiRoute.DistributionParams
 import com.wavesplatform.common.state.ByteStr
@@ -206,7 +205,13 @@ case class AssetsApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSync
     }
 
   @Path("/nft/{address}/limit/{limit}")
-  @ApiOperation(value = "NFTs", notes = "Account's NFTs balance", httpMethod = "GET", response = classOf[TransactionDesc], responseContainer = "List")
+  @ApiOperation(
+    value = "NFTs",
+    notes = "Account's NFTs balance",
+    httpMethod = "GET",
+    response = classOf[IssueTransactionDesc],
+    responseContainer = "List"
+  )
   @ApiImplicitParams(
     Array(
       new ApiImplicitParam(name = "address", value = "Address", required = true, dataType = "string", paramType = "path"),
@@ -386,10 +391,20 @@ case class AssetsApiRoute(settings: RestAPISettings, wallet: Wallet, utxPoolSync
       minSponsoredAssetFee: Long,
       sponsorBalance: Long,
       quantity: Long,
-      issueTransaction: TransactionDesc
+      issueTransaction: IssueTransactionDesc
   )
   private[this] case class AccountAssetsDesc(address: String, balances: Seq[AccountAssetDesc])
   private[this] case class BalanceDistributionDesc(hasNext: Boolean, last: String, values: Map[Address, String])
+  private[this] case class IssueTransactionDesc(
+      id: String,
+      height: Int,
+      version: Byte,
+      name: String,
+      description: String,
+      quantity: Long,
+      reissuable: Boolean,
+      decimals: Int
+  )
 }
 
 object AssetsApiRoute {

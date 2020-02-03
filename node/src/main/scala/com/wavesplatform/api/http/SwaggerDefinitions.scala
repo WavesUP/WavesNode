@@ -42,7 +42,9 @@ object SwaggerDefinitions {
       val timestamp: Long,
       `type`: Short,
       @(ApiModelProperty @field)(required = false)
-      val chainId: Short
+      val chainId: Short,
+      @(ApiModelProperty @field)(required = false)
+      height: Int
   )
 
   @ApiModel("Block")
