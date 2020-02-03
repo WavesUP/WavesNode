@@ -16,13 +16,16 @@ case class WalletApiRoute(settings: RestAPISettings, wallet: Wallet) extends Api
   override lazy val route = seed
 
   @Path("/seed")
-  @ApiOperation(value = "Seed", notes = "Export wallet seed", httpMethod = "GET", authorizations = Array(new Authorization(ApiKeyDefName)))
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Seed")
-    )
+  @ApiOperation(
+    value = "Seed",
+    notes = "Export wallet seed",
+    httpMethod = "GET",
+    authorizations = Array(new Authorization(ApiKeyDefName)),
+    response = classOf[SeedDesc]
   )
   def seed: Route = (path("wallet" / "seed") & get & withAuth) {
     complete(Json.obj("seed" -> Base58.encode(wallet.seed)))
   }
+
+  private[this] case class SeedDesc(seed: String)
 }
