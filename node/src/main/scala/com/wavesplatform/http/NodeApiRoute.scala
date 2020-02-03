@@ -25,22 +25,18 @@ case class NodeApiRoute(settings: RestAPISettings, blockchain: Blockchain, appli
   }
 
   @Path("/version")
-  @ApiOperation(value = "Version", notes = "Get Waves node version", httpMethod = "GET")
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Json Waves node version")
-    )
-  )
+  @ApiOperation(value = "Version", notes = "Get Waves node version", httpMethod = "GET", response = classOf[VersionDesc])
   def version: Route = (get & path("version")) {
     complete(Json.obj("version" -> Constants.AgentName))
   }
 
   @Path("/stop")
-  @ApiOperation(value = "Stop", notes = "Stop the node", httpMethod = "POST", authorizations = Array(new Authorization(ApiKeyDefName)))
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Stopping result")
-    )
+  @ApiOperation(
+    value = "Stop",
+    notes = "Stop the node",
+    httpMethod = "POST",
+    authorizations = Array(new Authorization(ApiKeyDefName)),
+    response = classOf[StoppedDesc]
   )
   def stop: Route = (post & path("stop") & withAuth) {
     log.info("Request to stop application")
@@ -49,12 +45,7 @@ case class NodeApiRoute(settings: RestAPISettings, blockchain: Blockchain, appli
   }
 
   @Path("/status")
-  @ApiOperation(value = "Status", notes = "Get status of the running core", httpMethod = "GET")
-  @ApiResponses(
-    Array(
-      new ApiResponse(code = 200, message = "Status")
-    )
-  )
+  @ApiOperation(value = "Status", notes = "Get status of the running core", httpMethod = "GET", response = classOf[StatusDesc])
   def status: Route = (get & path("status")) {
     val lastUpdated = blockchain.lastBlock.get.timestamp
     complete(
@@ -66,4 +57,8 @@ case class NodeApiRoute(settings: RestAPISettings, blockchain: Blockchain, appli
       )
     )
   }
+
+  private[this] case class VersionDesc(version: String)
+  private[this] case class StoppedDesc(stopped: Boolean)
+  private[this] case class StatusDesc(blockchainHeight: Int, stateHeight: Int, updatedTimestamp: Long, updatedDate: String)
 }
