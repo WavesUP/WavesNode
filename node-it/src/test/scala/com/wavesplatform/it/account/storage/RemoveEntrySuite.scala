@@ -47,69 +47,39 @@ class RemoveEntrySuite extends BaseSuite {
        """.stripMargin
 
   "Remove entry from account storage" - {
-    val stringTestData  = "String"  -> "someValue"
-    val integerTestData = "Integer" -> 1
-    val booleanTestData = "Boolean" -> true
-    val binaryTestData  = "Binary"  -> ""
 
-    for (data <- Seq(stringTestData, integerTestData, booleanTestData, binaryTestData)) s"${data._1} entry could be removed from account storage" in {
-      val t = data._1
-      val k = "someKey"
-      val v = data._2
-      val address =
-        createDapp(script, writeEntry(t, v.toString))
-
-      invokeScript(address, s"write$t", k, v.toString)
-
-      miner.getData(address) should have size 1
-      miner.getDataByKey(address, k).key shouldBe k
-      miner.getDataByKey(address, k).value shouldBe v
-      miner.getDataByKey(address, k).getClass.getCanonicalName shouldBe s"com.wavesplatform.state.${t}DataEntry"
-
-      //invokeScript(address, "delete", k)
-
-      //miner.getData(address) should have size 0
-    }
-
-    "Removing nonexistent entry should not produce an error" in {
+    "Simple remove one entry" in {
       val address = createDapp(script)
 
-      invokeScript(address, "delete", "nonexistent-key")
-    }
+      val txWrite = miner
+        .invokeScript(
+          address,
+          address,
+          fee = smartMinFee + smartFee,
+          waitForTx = true,
+          func = Some("write"),
+          args = List(CONST_STRING("someKey1").explicitGet(), CONST_STRING("someValue1").explicitGet())
+        )
+        ._1
+        .id
+      nodes.waitForHeightAriseAndTxPresent(txWrite)
 
-    "Could remove 100 entries" in {
-      val address = createDapp(script, deleteEntriesFunc(100))
+      miner.getData(address) should have size 1
 
-      miner.waitForTransaction((0 to 99).map(i => invokeScript(address, s"write", s"key-$i", "value", wait = false)).last)
-      miner.getData(address) should have size 100
-
-      miner.waitForTransaction(invokeScript(address, s"delete100Entries", wait = false))
+      val txDelete = miner
+        .invokeScript(
+          address,
+          address,
+          fee = smartMinFee + smartFee,
+          waitForTx = true,
+          func = Some("delete"),
+          args = List(CONST_STRING("someKey1").explicitGet())
+        )
+        ._1
+        .id
+      nodes.waitForHeightAriseAndTxPresent(txDelete)
 
       miner.getData(address) should have size 0
-    }
-
-    "Removing more than 100 entries should produce an error" in {
-      val address = createDapp(script, deleteEntriesFunc(101))
-
-      miner.waitForTransaction((0 to 100).map(i => invokeScript(address, s"write", s"key-$i", "value", wait = false)).last)
-      miner.getData(address) should have size 101
-
-      assertBadRequestAndMessage(
-        miner.waitForTransaction(invokeScript(address, s"delete101Entries", wait = false)),
-        "Error while executing account-script: List size exceed 101"
-      )
-
-      miner.getData(address) should have size 0
-    }
-
-    "Trying of writing key longer than 400 bytes and removing it should produce an error" in {
-      val address    = createDapp(script, deleteEntriesFunc(101))
-      val tooLongKey = new scala.util.Random().nextString(401)
-
-      assertBadRequestAndMessage(
-        miner.waitForTransaction(invokeScript(address, s"write", tooLongKey, "value", wait = false)),
-        "State check failed. Reason: Key size must be less than 100"
-      )
     }
   }
 
