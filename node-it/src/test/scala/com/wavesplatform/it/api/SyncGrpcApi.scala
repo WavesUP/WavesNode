@@ -364,8 +364,9 @@ object SyncGrpcApi extends Assertions {
     }
 
     def blockSeqByAddress(address: String, fromHeight: Int, toHeight: Int): Seq[VanillaBlock] = {
-      val filter = BlockRangeRequest.Filter.GeneratorAddress(ByteString.copyFrom(Base58.decode(address)))
-      blockSeq(fromHeight, toHeight, filter)
+//      val filter = BlockRangeRequest.Filter.GeneratorAddress(ByteString.copyFrom(Base58.decode(address)))
+//      blockSeq(fromHeight, toHeight, filter)
+      ???
     }
 
     def getStatuses(request: TransactionsByIdRequest): Seq[PBTransactionStatus] = sync(async(n).getStatuses(request))

@@ -77,7 +77,7 @@ class BlockV5GrpcSuite
         assert(blockV5.transactionsRootValid(), "transactionsRoot is not valid")
       }
 
-      val blockSeqOfBlocksV5ByPKGrpc = NodeExtGrpc(sender).blockSeq(
+      /*val blockSeqOfBlocksV5ByPKGrpc = NodeExtGrpc(sender).blockSeq(
         currentHeight,
         currentHeight + 2,
         BlockRangeRequest.Filter.GeneratorPublicKey(ByteString.copyFrom(miner.keyPair.publicKey.arr))
@@ -88,7 +88,7 @@ class BlockV5GrpcSuite
         blockV5.header.version shouldBe Block.ProtoBlockVersion
         blockV5.header.generationSignature.arr.length shouldBe Block.GenerationVRFSignatureLength
         assert(blockV5.transactionsRootValid(), "transactionsRoot is not valid")
-      }
+      }*/
     }
   }
 }
