@@ -11,10 +11,10 @@ import com.wavesplatform.features.FeatureProvider._
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.metrics.TxProcessingStats
 import com.wavesplatform.metrics.TxProcessingStats.TxTimerExt
-import com.wavesplatform.state.InvokeScriptResult.ErrorMessage
-import com.wavesplatform.state.{Blockchain, Diff, InvokeScriptResult, LeaseBalance, Portfolio, Sponsorship}
+//import com.wavesplatform.state.InvokeScriptResult.ErrorMessage
+import com.wavesplatform.state.{Blockchain, Diff, /*InvokeScriptResult, */LeaseBalance, Portfolio, Sponsorship}
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
-import com.wavesplatform.transaction.TxValidationError.{FailedScriptError, GenericError, UnsupportedTransactionType}
+import com.wavesplatform.transaction.TxValidationError.{/*FailedScriptError, */GenericError, UnsupportedTransactionType}
 import com.wavesplatform.transaction._
 import com.wavesplatform.transaction.assets._
 import com.wavesplatform.transaction.assets.exchange.{ExchangeTransaction, Order}
@@ -24,25 +24,25 @@ import com.wavesplatform.transaction.smart.{InvokeScriptTransaction, SetScriptTr
 import com.wavesplatform.transaction.transfer.{MassTransferTransaction, TransferTransaction}
 import play.api.libs.json.Json
 
-import scala.collection.mutable
+//import scala.collection.mutable
 
 object TransactionDiffer {
   def apply(prevBlockTs: Option[Long], currentBlockTs: Long, verify: Boolean = true)(
       blockchain: Blockchain,
       tx: Transaction
   ): TracedResult[ValidationError, Diff] =
-    validate(prevBlockTs, currentBlockTs, verify, skipFailing = false)(blockchain, tx) match {
+    validate(prevBlockTs, currentBlockTs, verify, skipFailing = false)(blockchain, tx)/* match {
       case isFailedTransaction(error) if acceptFailed(blockchain) => failedTransactionDiff(blockchain, tx, error).traced
       case result                                                 => result
-    }
+    }*/
 
   /** Validates transaction but since BlockV5 skips ability to fail (does not execute asset scripts and dApp script for ExchangeTx and InvokeScriptTx) */
-  def skipFailing(prevBlockTimestamp: Option[Long], currentBlockTimestamp: Long, verify: Boolean = true)(
-      blockchain: Blockchain,
-      tx: Transaction
-  ): TracedResult[ValidationError, Diff] = {
-    validate(prevBlockTimestamp, currentBlockTimestamp, verify = verify, skipFailing = mayFail(tx) && acceptFailed(blockchain))(blockchain, tx)
-  }
+//  def skipFailing(prevBlockTimestamp: Option[Long], currentBlockTimestamp: Long, verify: Boolean = true)(
+//      blockchain: Blockchain,
+//      tx: Transaction
+//  ): TracedResult[ValidationError, Diff] = {
+//    validate(prevBlockTimestamp, currentBlockTimestamp, verify = verify, skipFailing = mayFail(tx) && acceptFailed(blockchain))(blockchain, tx)
+//  }
 
   /**
     * Validates transaction.
@@ -213,7 +213,7 @@ object TransactionDiffer {
 
   private def acceptFailed(blockchain: Blockchain): Boolean = blockchain.isFeatureActivated(BlockV5)
 
-  private def failedTransactionDiff(blockchain: Blockchain, tx: Transaction, error: Option[ErrorMessage]): Either[ValidationError, Diff] = {
+  /*  private def failedTransactionDiff(blockchain: Blockchain, tx: Transaction, error: Option[ErrorMessage]): Either[ValidationError, Diff] = {
     val extractDAppAddress = tx match {
       case ist: InvokeScriptTransaction => blockchain.resolveAlias(ist.dAppAddressOrAlias).map(Some(_))
       case _                            => Right(None)
@@ -244,7 +244,7 @@ object TransactionDiffer {
         case _                          => None
       }
   }
-
+*/
   // helpers
   private def feePortfolios(blockchain: Blockchain, tx: Transaction): Either[ValidationError, Map[Address, Portfolio]] =
     tx match {

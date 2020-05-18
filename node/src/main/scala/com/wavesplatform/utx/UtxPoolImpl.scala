@@ -192,7 +192,7 @@ class UtxPoolImpl(
   }
 
   private[this] def addTransaction(tx: Transaction, verify: Boolean, priority: Boolean): TracedResult[ValidationError, Boolean] = {
-    val diffEi = TransactionDiffer.skipFailing(blockchain.lastBlockTimestamp, time.correctedTime(), verify)(blockchain, tx)
+    val diffEi = TransactionDiffer(blockchain.lastBlockTimestamp, time.correctedTime(), verify)(blockchain, tx)
     def addPortfolio(): Unit = diffEi.map { diff =>
       pessimisticPortfolios.add(tx.id(), diff)
       onEvent(UtxEvent.TxAdded(tx, diff))
@@ -261,7 +261,7 @@ class UtxPoolImpl(
   }
 
   private def cleanUnconfirmed(): Unit =
-    pack(TransactionDiffer.skipFailing(blockchain.lastBlockTimestamp, time.correctedTime()))(
+    pack(TransactionDiffer(blockchain.lastBlockTimestamp, time.correctedTime()))(
       MultiDimensionalMiningConstraint.unlimited,
       ScalaDuration.Inf
     )
