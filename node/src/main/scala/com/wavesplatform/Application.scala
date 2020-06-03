@@ -133,6 +133,8 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
 
     val establishedConnections = new ConcurrentHashMap[Channel, PeerInfo]
     val allChannels            = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE)
+    utxEvents.foreach(e => log.warn(s"UTX event: $e"))
+
     val utxStorage =
       new UtxPoolImpl(
         time,
@@ -178,7 +180,7 @@ class Application(val actorSystem: ActorSystem, val settings: WavesSettings, con
         pos,
         minerScheduler,
         appenderScheduler,
-        utxEvents.collect { case UtxEvent.TxAdded(_, _) => () }.firstL
+        Task.defer(utxEvents.collect { case UtxEvent.TxAdded(_, _) => () }.firstL)
       )
 
     val processBlock =

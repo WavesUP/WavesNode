@@ -49,7 +49,9 @@ class MicroBlockMinerImpl(
         case res @ Success(newBlock, newConstraint) =>
           Task.defer(generateMicroBlockSequence(account, newBlock, constraints, newConstraint, res.nanoTime))
         case Retry =>
+          log.warn("Waiting for non-empty UTX")
           waitForUtxNonEmpty
+            .map(_ => log.info("UTX event fired"))
             .flatMap(_ => generateMicroBlockSequence(account, accumulatedBlock, constraints, restTotalConstraint, lastMicroBlock))
         case Stop =>
           setDebugState(MinerDebugInfo.MiningBlocks)
