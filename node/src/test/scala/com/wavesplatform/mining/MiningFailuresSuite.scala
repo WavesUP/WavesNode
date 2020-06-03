@@ -22,6 +22,8 @@ import monix.execution.Scheduler.Implicits.global
 import org.scalamock.scalatest.PathMockFactory
 import org.scalatest.{FlatSpec, Matchers, PrivateMethodTester}
 
+import scala.concurrent.duration._
+
 class MiningFailuresSuite extends FlatSpec with Matchers with PrivateMethodTester with PathMockFactory with WithDB with TransactionGen {
   trait BlockchainUpdaterNG extends Blockchain with BlockchainUpdater with NG
 
@@ -55,7 +57,18 @@ class MiningFailuresSuite extends FlatSpec with Matchers with PrivateMethodTeste
       val wallet      = Wallet(WalletSettings(None, Some("123"), None))
       val utxPool     = new UtxPoolImpl(ntpTime, blockchainUpdater, ignoreSpendableBalanceChanged, wavesSettings.utxSettings, enablePriorityPool = true)
       val pos         = PoSSelector(blockchainUpdater, wavesSettings.synchronizationSettings)
-      new MinerImpl(allChannels, blockchainUpdater, wavesSettings.copy(blockchainSettings = blockchainSettings), ntpTime, utxPool, wallet, pos, scheduler, scheduler)
+      new MinerImpl(
+        allChannels,
+        blockchainUpdater,
+        wavesSettings.copy(blockchainSettings = blockchainSettings),
+        ntpTime,
+        utxPool,
+        wallet,
+        pos,
+        scheduler,
+        scheduler,
+        Task.sleep(200 millis)
+      )
     }
 
     val genesis = TestBlock.create(System.currentTimeMillis(), Nil)

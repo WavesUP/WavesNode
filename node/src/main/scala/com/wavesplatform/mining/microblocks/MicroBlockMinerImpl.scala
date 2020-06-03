@@ -30,11 +30,12 @@ class MicroBlockMinerImpl(
     utx: UtxPool,
     settings: MinerSettings,
     minerScheduler: SchedulerService,
-    appenderScheduler: SchedulerService
+    appenderScheduler: SchedulerService,
+    waitForUtxNonEmpty: Task[Unit]
 ) extends MicroBlockMiner
     with ScorexLogging {
 
-  val microBlockBuildTimeStats = Kamon.timer("miner.forge-microblock-time")
+  private[this] val microBlockBuildTimeStats = Kamon.timer("miner.forge-microblock-time")
 
   def generateMicroBlockSequence(
       account: KeyPair,
@@ -48,9 +49,8 @@ class MicroBlockMinerImpl(
         case res @ Success(newBlock, newConstraint) =>
           Task.defer(generateMicroBlockSequence(account, newBlock, constraints, newConstraint, res.nanoTime))
         case Retry =>
-          Task
-            .defer(generateMicroBlockSequence(account, accumulatedBlock, constraints, restTotalConstraint, lastMicroBlock))
-            .delayExecution(1 second)
+          waitForUtxNonEmpty
+            .flatMap(_ => generateMicroBlockSequence(account, accumulatedBlock, constraints, restTotalConstraint, lastMicroBlock))
         case Stop =>
           setDebugState(MinerDebugInfo.MiningBlocks)
           Task(log.debug("MicroBlock mining completed, block is full"))
@@ -64,7 +64,9 @@ class MicroBlockMinerImpl(
       constraints: MiningConstraints,
       restTotalConstraint: MiningConstraint,
       lastMicroBlock: Long
-  ) = {
+  ): Task[MicroBlockMiningResult] = {
+    if (utx.size == 0) return Task.now(Retry)
+
     val packTask = Task.cancelable[(Option[Seq[Transaction]], MiningConstraint)] { cb =>
       @volatile var cancelled = false
       minerScheduler.execute { () =>

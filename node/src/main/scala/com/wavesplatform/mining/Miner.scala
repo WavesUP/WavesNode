@@ -54,7 +54,8 @@ class MinerImpl(
     wallet: Wallet,
     pos: PoSSelector,
     val minerScheduler: SchedulerService,
-    val appenderScheduler: SchedulerService
+    val appenderScheduler: SchedulerService,
+    waitForUtxNonEmpty: Task[Unit]
 ) extends Miner
     with MinerDebugInfo
     with ScorexLogging {
@@ -78,7 +79,8 @@ class MinerImpl(
     utx,
     settings.minerSettings,
     minerScheduler,
-    appenderScheduler
+    appenderScheduler,
+    waitForUtxNonEmpty
   )
 
   def getNextBlockGenerationOffset(account: KeyPair): Either[String, FiniteDuration] =
