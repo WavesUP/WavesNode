@@ -20,7 +20,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import scala.concurrent.duration._
 import scala.util.Random
 
-class UpdateAssetInfoTransactionSuite extends BaseTransactionSuite with CancelAfterFailure with TableDrivenPropertyChecks {
+class UpdateAssetInfoTransactionSuite extends BaseTransactionSuite with CancelAfterFailure with TableDrivenPropertyChecks with OverflowBlock  {
   import UpdateAssetInfoTransactionSuite._
   val updateInterval = 2
   override protected def nodeConfigs: Seq[Config] =
@@ -183,6 +183,8 @@ class UpdateAssetInfoTransactionSuite extends BaseTransactionSuite with CancelAf
 
   test("able to update info of other asset after updating info of first asset") {
     nodes.waitForHeightArise()
+    overflowBlock()
+
     val updateAssetInfoTxId = sender.updateAssetInfo(issuer, otherAssetId, "secondUpdate", "secondUpdatedDescription", minFee)._1.id
     sender.waitForUtxIncreased(0)
     checkUpdateAssetInfoTx(sender.utx().head, "secondUpdate", "secondUpdatedDescription")
