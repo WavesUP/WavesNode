@@ -67,8 +67,6 @@ class MicroBlockMinerImpl(
       restTotalConstraint: MiningConstraint,
       lastMicroBlock: Long
   ): Task[MicroBlockMiningResult] = {
-    if (utx.size == 0) return Task.now(Retry)
-
     val packTask = Task.cancelable[(Option[Seq[Transaction]], MiningConstraint)] { cb =>
       @volatile var cancelled = false
       minerScheduler.execute { () =>
