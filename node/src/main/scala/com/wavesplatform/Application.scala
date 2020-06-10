@@ -49,7 +49,7 @@ import kamon.influxdb.InfluxDBReporter
 import kamon.system.SystemMetrics
 import monix.eval.{Coeval, Task}
 import monix.execution.schedulers.{ExecutorScheduler, SchedulerService}
-import monix.reactive.Observable
+import monix.reactive.{Consumer, Observable}
 import monix.reactive.subjects.ConcurrentSubject
 import org.influxdb.dto.Point
 import org.slf4j.LoggerFactory
