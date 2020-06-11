@@ -1,11 +1,14 @@
 package com.wavesplatform.it.sync.smartcontract
 
+import akka.http.scaladsl.model.StatusCodes
 import com.wavesplatform.common.utils.EitherExt2
 import com.wavesplatform.it.api.SyncHttpApi._
+import com.wavesplatform.it.api.TransactionInfo
 import com.wavesplatform.it.sync.{minFee, setScriptFee}
 import com.wavesplatform.it.transactions.BaseTransactionSuite
 import com.wavesplatform.it.util._
 import com.wavesplatform.lang.v1.compiler.Terms.CONST_LONG
+import com.wavesplatform.lang.v1.estimator.v2.ScriptEstimatorV2
 import com.wavesplatform.state._
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.smart.InvokeScriptTransaction
@@ -14,14 +17,14 @@ import org.scalatest.CancelAfterFailure
 
 class HodlContractTransactionSuite extends BaseTransactionSuite with CancelAfterFailure {
 
-  private val contract = pkByAddress(firstAddress)
-  private val caller   = pkByAddress(secondAddress)
+  private val contract = firstAddress
+  private val caller   = secondAddress
 
   test("setup contract account with waves") {
     sender
       .transfer(
         sender.address,
-        recipient = contract.address,
+        recipient = contract,
         assetId = None,
         amount = 5.waves,
         fee = minFee,
@@ -34,7 +37,7 @@ class HodlContractTransactionSuite extends BaseTransactionSuite with CancelAfter
     sender
       .transfer(
         sender.address,
-        recipient = caller.address,
+        recipient = caller,
         assetId = None,
         amount = 10.waves,
         fee = minFee,
@@ -84,71 +87,74 @@ class HodlContractTransactionSuite extends BaseTransactionSuite with CancelAfter
         |	}
         """.stripMargin
 
-    val script      = ScriptCompiler.compile(scriptText).explicitGet()._1.bytes().base64
-    val setScriptId = sender.setScript(contract.address, Some(script), setScriptFee, waitForTx = true).id
+    val script      = ScriptCompiler.compile(scriptText, ScriptEstimatorV2).explicitGet()._1.bytes().base64
+    val setScriptId = sender.setScript(contract, Some(script), setScriptFee, waitForTx = true).id
 
-    val acc0ScriptInfo = sender.addressScriptInfo(contract.address)
+    val acc0ScriptInfo = sender.addressScriptInfo(contract)
 
     acc0ScriptInfo.script.isEmpty shouldBe false
     acc0ScriptInfo.scriptText.isEmpty shouldBe false
     acc0ScriptInfo.script.get.startsWith("base64:") shouldBe true
 
-    sender.transactionInfo(setScriptId).script.get.startsWith("base64:") shouldBe true
+    sender.transactionInfo[TransactionInfo](setScriptId).script.get.startsWith("base64:") shouldBe true
   }
 
   test("caller deposits waves") {
-    val balanceBefore = sender.accountBalances(contract.address)._1
+    val balanceBefore = sender.accountBalances(contract)._1
     val invokeScriptId = sender
       .invokeScript(
-        caller.address,
-        dappAddress = contract.address,
+        caller,
+        dappAddress = contract,
         func = Some("deposit"),
         args = List.empty,
         payment = Seq(InvokeScriptTransaction.Payment(1.5.waves, Waves)),
         fee = 1.waves,
         waitForTx = true
       )
-      .id
+      ._1.id
 
     sender.waitForTransaction(invokeScriptId)
 
-    sender.getDataByKey(contract.address, caller.address) shouldBe IntegerDataEntry(caller.address, 1.5.waves)
-    val balanceAfter = sender.accountBalances(contract.address)._1
+    sender.getDataByKey(contract, caller) shouldBe IntegerDataEntry(caller, 1.5.waves)
+    val balanceAfter = sender.accountBalances(contract)._1
 
     (balanceAfter - balanceBefore) shouldBe 1.5.waves
   }
 
   test("caller can't withdraw more than owns") {
-    assertBadRequestAndMessage(
-      sender.invokeScript(
-        caller.address,
-        contract.address,
-        func = Some("withdraw"),
-        args = List(CONST_LONG(1.51.waves)),
-        payment = Seq(),
-        fee = 1.waves
-      ),
-      "Not enough balance"
+    val tx = sender.invokeScript(
+      caller,
+      contract,
+      func = Some("withdraw"),
+      args = List(CONST_LONG(1.51.waves)),
+      payment = Seq(),
+      fee = 1.waves
+    )._1.id
+    sender.waitForHeight(sender.height + 1)
+    sender.transactionStatus(Seq(tx)).head.status shouldBe "not_found"
+    assertApiErrorRaised(
+      sender.debugStateChanges(tx).stateChanges,
+      StatusCodes.NotFound.intValue
     )
   }
 
   test("caller can withdraw less than he owns") {
-    val balanceBefore = sender.accountBalances(contract.address)._1
+    val balanceBefore = sender.accountBalances(contract)._1
     val invokeScriptId = sender
       .invokeScript(
-        caller.address,
-        dappAddress = contract.address,
+        caller,
+        dappAddress = contract,
         func = Some("withdraw"),
         args = List(CONST_LONG(1.49.waves)),
         payment = Seq(),
         fee = 1.waves,
         waitForTx = true
       )
-      .id
+      ._1.id
 
-    val balanceAfter = sender.accountBalances(contract.address)._1
+    val balanceAfter = sender.accountBalances(contract)._1
 
-    sender.getDataByKey(contract.address, caller.address) shouldBe IntegerDataEntry(caller.address, 0.01.waves)
+    sender.getDataByKey(contract, caller) shouldBe IntegerDataEntry(caller, 0.01.waves)
     (balanceAfter - balanceBefore) shouldBe -1.49.waves
 
     val stateChangesInfo = sender.debugStateChanges(invokeScriptId).stateChanges
@@ -156,11 +162,11 @@ class HodlContractTransactionSuite extends BaseTransactionSuite with CancelAfter
     val stateChangesData = stateChangesInfo.get.data.head
     stateChangesInfo.get.data.length shouldBe 1
     stateChangesData.`type` shouldBe "integer"
-    stateChangesData.value shouldBe 0.01.waves
+    stateChangesData.value.asInstanceOf[Long] shouldBe 0.01.waves
 
     val stateChangesTransfers = stateChangesInfo.get.transfers.head
     stateChangesInfo.get.transfers.length shouldBe 1
-    stateChangesTransfers.address shouldBe caller.address
+    stateChangesTransfers.address shouldBe caller
     stateChangesTransfers.amount shouldBe 1.49.waves
     stateChangesTransfers.asset shouldBe None
   }

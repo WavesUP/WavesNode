@@ -3,11 +3,11 @@ package com.wavesplatform.generator.utils
 import java.util.concurrent.ThreadLocalRandom
 
 import com.wavesplatform.account.{Address, KeyPair, PublicKey}
-import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2
 import com.wavesplatform.generator.utils.Implicits._
 import com.wavesplatform.lang.script.Script
-import com.wavesplatform.state.{BinaryDataEntry, BooleanDataEntry, DataEntry, IntegerDataEntry, StringDataEntry}
+import com.wavesplatform.lang.v1.estimator.ScriptEstimator
+import com.wavesplatform.state.{BinaryDataEntry, BooleanDataEntry, DataEntry, EmptyDataEntry, IntegerDataEntry, StringDataEntry}
 import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.Transaction
 import com.wavesplatform.transaction.smart.script.ScriptCompiler
@@ -22,7 +22,7 @@ object Gen {
 
   val log = LoggerFacade(LoggerFactory.getLogger("Gen"))
 
-  def script(complexity: Boolean = true): Script = {
+  def script(complexity: Boolean = true, estimator: ScriptEstimator): Script = {
     val s = if (complexity) s"""
                                |${(for (b <- 1 to 10) yield {
                                  s"let a$b = blake2b256(base58'') != base58'' && keccak256(base58'') != base58'' && sha256(base58'') != base58'' && sigVerify(base58'333', base58'123', base58'567')"
@@ -35,7 +35,7 @@ object Gen {
         |${recString(10)} || true
       """.stripMargin
 
-    val script = ScriptCompiler(s, isAssetScript = false).explicitGet()
+    val script = ScriptCompiler(s, isAssetScript = false, estimator).explicitGet()
 
     script._1
   }
@@ -45,18 +45,19 @@ object Gen {
     else
       s"if (${recString(n - 1)}) then true else false"
 
-  def oracleScript(oracle: KeyPair, data: Set[DataEntry[_]]): Script = {
+  def oracleScript(oracle: KeyPair, data: Set[DataEntry[_]], estimator: ScriptEstimator): Script = {
     val conditions =
       data.map {
         case IntegerDataEntry(key, value) => s"""(extract(getInteger(oracle, "$key")) == $value)"""
         case BooleanDataEntry(key, _)     => s"""extract(getBoolean(oracle, "$key"))"""
         case BinaryDataEntry(key, value)  => s"""(extract(getBinary(oracle, "$key")) == $value)"""
         case StringDataEntry(key, value)  => s"""(extract(getString(oracle, "$key")) == "$value")"""
+        case EmptyDataEntry(_) => ???
       } reduce [String] { case (l, r) => s"$l && $r " }
 
     val src =
       s"""
-         |let oracle = Address(base58'${oracle.address}')
+         |let oracle = Address(base58'${oracle.toAddress}')
          |
          |match tx {
          |  case _: SetScriptTransaction => true
@@ -64,17 +65,17 @@ object Gen {
          |}
        """.stripMargin
 
-    val script = ScriptCompiler(src, isAssetScript = false).explicitGet()
+    val script = ScriptCompiler(src, isAssetScript = false, estimator).explicitGet()
 
     script._1
   }
 
-  def multiSigScript(owners: Seq[KeyPair], requiredProofsCount: Int): Script = {
+  def multiSigScript(owners: Seq[KeyPair], requiredProofsCount: Int, estimator: ScriptEstimator): Script = {
     val accountsWithIndexes = owners.zipWithIndex
     val keyLets =
       accountsWithIndexes map {
         case (acc, i) =>
-          s"let accountPK$i = base58'${ByteStr(acc.publicKey).toString}'"
+          s"let accountPK$i = base58'${acc.publicKey}'"
       } mkString "\n"
 
     val signedLets =
@@ -101,7 +102,7 @@ object Gen {
        |$finalStatement
       """.stripMargin
 
-    val (script, _) = ScriptCompiler(src, isAssetScript = false)
+    val (script, _) = ScriptCompiler(src, isAssetScript = false, estimator)
       .explicitGet()
 
     script
@@ -122,7 +123,7 @@ object Gen {
       .zipWithIndex
       .map {
         case (((src, dst), fee), i) =>
-          TransferTransactionV2.selfSigned(Waves, src, dst, fee, now + i, Waves, fee, Array.emptyByteArray)
+          TransferTransaction.selfSigned(2.toByte, src, dst, Waves, fee, Waves, fee, None, now + i)
       }
       .collect { case Right(x) => x }
   }
@@ -137,7 +138,7 @@ object Gen {
         case ((sender, count), i) =>
           val transfers = List.tabulate(count)(_ => ParsedTransfer(recipientGen.next(), amountGen.next()))
           val fee       = 100000 + count * 50000
-          MassTransferTransaction.selfSigned(Waves, sender, transfers, now + i, fee, Array.emptyByteArray)
+          MassTransferTransaction.selfSigned(1.toByte, sender, Waves, transfers, fee, now + i, None)
       }
       .collect { case Right(tx) => tx }
   }

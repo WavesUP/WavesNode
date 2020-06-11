@@ -18,23 +18,13 @@ class IssueNFTSuite extends BaseTransactionSuite with TableDrivenPropertyChecks 
 
   override def nodeConfigs: Seq[Config] =
     NodeConfigs.newBuilder
-      .overrideBase(_.quorum(0))
+      .overrideBase(_.raw(
+        """waves {
+          |  miner.quorum = 0
+          |  blockchain.custom.functionality.pre-activated-features.13 = 10
+          |}""".stripMargin))
       .withDefault(1)
-      .withSpecial(_.raw(s"""
-                            |waves.blockchain.custom.functionality.pre-activated-features = {
-                            |          2 = 0
-                            |          3 = 0
-                            |          4 = 0
-                            |          5 = 0
-                            |          6 = 0
-                            |          7 = 0
-                            |          9 = 0
-                            |          10 = 0
-                            |          11 = 0
-                            |          12 = 0
-                            |          13 = 0
-                            |}
-         """.stripMargin))
+      .withSpecial(_.nonMiner)
       .buildNonConflicting()
 
   test("Can't issue NFT before activation") {
@@ -42,14 +32,14 @@ class IssueNFTSuite extends BaseTransactionSuite with TableDrivenPropertyChecks 
     val assetDescription = "my asset description"
 
     firstNode.transfer(
-      firstNode.privateKey.address,
-      firstNodeIssuer.address,
+      firstNode.keyPair.toAddress.toString,
+      firstNodeIssuer.toAddress.toString,
       10.waves,
       0.001.waves,
       waitForTx = true
     )
 
-    assertBadRequest(
+    assertApiErrorRaised(
       firstNode.issue(firstAddress, assetName, assetDescription, 1, 0, reissuable = false, 1.waves / 1000, waitForTx = true)
     )
   }
@@ -57,6 +47,8 @@ class IssueNFTSuite extends BaseTransactionSuite with TableDrivenPropertyChecks 
   test("Able to issue NFT token with reduced fee") {
     val assetName        = "NFTAsset"
     val assetDescription = "my asset description"
+
+    nodes.waitForHeight(10)
 
     val nftIssueTxId = secondNode
       .issue(secondNode.address,
@@ -69,6 +61,8 @@ class IssueNFTSuite extends BaseTransactionSuite with TableDrivenPropertyChecks 
         script = None,
         waitForTx = true)
       .id
+
+    nodes.waitForHeightArise()
 
     secondNode.assertAssetBalance(secondNode.address, nftIssueTxId, 1L)
   }
@@ -135,17 +129,17 @@ class IssueNFTSuite extends BaseTransactionSuite with TableDrivenPropertyChecks 
     nodes.waitForHeightArise()
     val assetsBalance    = secondNode.assetsBalance(secondNode.address).balances.map(a => a.assetId)
 
-    val nftAssetsBalance = secondNode.nftAssetsBalance(secondNode.address, 10).map(id => id.assetId)
+    val nftAssetsBalance = secondNode.nftList(secondNode.address, 10).map(id => id.assetId)
 
     assetsBalance shouldNot contain atLeastOneElementOf nftAssetsBalance
     nftAssetsBalance shouldNot contain atLeastOneElementOf assetsBalance
     nftAssetsBalance.length shouldBe 10
 
-    val remaingNftAssets = secondNode.nftAssetsBalance(secondNode.address, 15, after = nftAssetsBalance.last).map(id => id.assetId)
+    val remaingNftAssets = secondNode.nftList(secondNode.address, 15, maybeAfter = Some(nftAssetsBalance.last)).map(id => id.assetId)
     remaingNftAssets.length shouldBe 11 // 11 because we issue 1 more in previous test
     remaingNftAssets shouldNot contain atLeastOneElementOf nftAssetsBalance
 
-    val allNFTAssets = secondNode.nftAssetsBalance(secondNode.address, 100).map(id => id.assetId)
+    val allNFTAssets = secondNode.nftList(secondNode.address, 100).map(id => id.assetId)
     allNFTAssets.length shouldBe 21 // 21 because we issue 1 more in previous test
     allNFTAssets shouldBe nftAssetsBalance ++ remaingNftAssets
 

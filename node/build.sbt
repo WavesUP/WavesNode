@@ -4,13 +4,14 @@ import com.typesafe.sbt.packager.Keys.executableScriptName
 import com.typesafe.sbt.packager.archetypes.TemplateWriter
 import sbtassembly.MergeStrategy
 
-enablePlugins(RunApplicationSettings, JavaServerAppPackaging, UniversalDeployPlugin, JDebPackaging, SystemdPlugin, GitVersioning)
+addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.1" cross CrossVersion.full)
 
+enablePlugins(RunApplicationSettings, JavaServerAppPackaging, UniversalDeployPlugin, JDebPackaging, SystemdPlugin, GitVersioning, VersionObject)
 
 resolvers ++= Seq(
   Resolver.bintrayRepo("ethereum", "maven"),
   Resolver.bintrayRepo("dnvriend", "maven"),
-  Resolver.sbtPluginRepo("releases")
+  Resolver.sbtPluginRepo("releases"),
 )
 
 libraryDependencies ++= Dependencies.node.value
@@ -18,6 +19,8 @@ coverageExcludedPackages := ""
 
 inConfig(Compile)(
   Seq(
+    PB.protoSources in Compile := Seq(PB.externalIncludePath.value, sourceDirectory.value / "protobuf"),
+    includeFilter in PB.generate := new SimpleFileFilter((f: File) => f.getName.endsWith(".proto") && f.getParent.endsWith("waves")),
     PB.targets += scalapb.gen(flatPackage = true) -> sourceManaged.value,
     PB.deleteTargetDirectory := false,
     packageDoc / publishArtifact := false,
@@ -87,9 +90,6 @@ inConfig(Universal)(
       "-J-Xms128m",
       "-J-Xmx2g",
       "-J-XX:+ExitOnOutOfMemoryError",
-      // Java 9 support
-      "-J-XX:+IgnoreUnrecognizedVMOptions",
-      "-J--add-modules=java.xml.bind",
       // from https://groups.google.com/d/msg/akka-user/9s4Yl7aEz3E/zfxmdc0cGQAJ
       "-J-XX:+UseG1GC",
       "-J-XX:+UseNUMA",
@@ -138,6 +138,8 @@ inConfig(Debian)(
         |}
         |""".stripMargin
   ) ++ nameFix)
+
+V.scalaPackage := "com.wavesplatform"
 
 // Hack for https://youtrack.jetbrains.com/issue/SCL-15210
 

@@ -1,7 +1,6 @@
 package com.wavesplatform.transaction
 
 import com.wavesplatform.transaction.TxValidationError.InvalidSignature
-import io.swagger.annotations.ApiModelProperty
 import monix.eval.{Coeval, Task}
 import monix.execution.Scheduler
 import monix.execution.schedulers.SchedulerService
@@ -12,17 +11,14 @@ import scala.concurrent.duration.Duration
 trait Signed extends Authorized {
   protected val signatureValid: Coeval[Boolean]
 
-  @ApiModelProperty(hidden = true)
   protected val signedDescendants: Coeval[Seq[Signed]] =
     Coeval(Nil)
 
-  @ApiModelProperty(hidden = true)
   protected val signaturesValidMemoized: Task[Either[InvalidSignature, this.type]] =
     Signed.validateTask[this.type](this).memoize
 
-  @ApiModelProperty(hidden = true)
   val signaturesValid: Coeval[Either[InvalidSignature, this.type]] =
-    Coeval.evalOnce(Await.result(signaturesValidMemoized.runAsync(Signed.scheduler), Duration.Inf))
+    Coeval.evalOnce(Await.result(signaturesValidMemoized.runToFuture(Signed.scheduler), Duration.Inf))
 }
 
 object Signed {
@@ -34,16 +30,18 @@ object Signed {
   }
 
   def validateOrdered[S <: Signed](ss: Seq[S]): E[Seq[S]] =
-    Await.result(Task
-                   .wander(ss)(s => s.signaturesValidMemoized)
-                   .map { l =>
-                     l.find(_.isLeft) match {
-                       case Some(e) => Left(e.left.get)
-                       case None    => Right(ss)
-                     }
-                   }
-                   .runAsync,
-                 Duration.Inf)
+    Await.result(
+      Task
+        .parTraverse(ss)(s => s.signaturesValidMemoized)
+        .map { l =>
+          l.find(_.isLeft) match {
+            case Some(e) => Left(e.left.get)
+            case None    => Right(ss)
+          }
+        }
+        .runAsyncLogErr,
+      Duration.Inf
+    )
 
   private def validateTask[S <: Signed](signedEntity: S): Task[E[S]] =
     Task {
@@ -57,7 +55,7 @@ object Signed {
         Task.now(Right(signedEntity))
       } else {
         Task
-          .wanderUnordered(signedEntity.signedDescendants())(s => s.signaturesValidMemoized)
+          .parTraverseUnordered(signedEntity.signedDescendants())(s => s.signaturesValidMemoized)
           .map(_.sequence.map(_ => signedEntity))
       }
     }.flatten

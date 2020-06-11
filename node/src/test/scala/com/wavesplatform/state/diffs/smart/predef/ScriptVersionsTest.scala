@@ -22,7 +22,7 @@ import shapeless.Coproduct
 class ScriptVersionsTest extends FreeSpec with PropertyChecks with Matchers with TransactionGen {
   def eval[T <: EVALUATED](script: String,
                            version: StdLibVersion,
-                           tx: Transaction = null,
+                           tx: Transaction = transferV2Gen.sample.get,
                            blockchain: Blockchain = EmptyBlockchain): Either[String, EVALUATED] = {
     val Success(expr, _) = Parser.parseExpr(script)
     for {
@@ -37,7 +37,7 @@ class ScriptVersionsTest extends FreeSpec with PropertyChecks with Matchers with
   val duplicateNames =
     """
       |match tx {
-      |  case tx: TransferTransaction => true
+      |  case _: TransferTransaction => true
       |  case _ => false
       |}
     """.stripMargin

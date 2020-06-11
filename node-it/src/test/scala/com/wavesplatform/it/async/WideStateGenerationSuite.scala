@@ -32,6 +32,7 @@ class WideStateGenerationSuite extends FreeSpec with WaitForHeight2 with Matcher
         |  synchronization.utx-synchronizer {
         |    max-buffer-size = 500
         |    max-buffer-time = 100ms
+        |    max-queue-size = 50000
         |  }
         |  utx.allow-skip-checks = false
         |  utx.max-scripted-size = 1000000
@@ -60,7 +61,7 @@ class WideStateGenerationSuite extends FreeSpec with WaitForHeight2 with Matcher
       _ <- Await.ready(traverse(nodes)(_.waitFor[Int]("UTX is empty")(_.utxSize, _ == 0, 5.seconds)), 7.minutes)
 
       height <- traverse(nodes)(_.height).map(_.max)
-      _      <- Await.ready(nodes.waitForSameBlockHeadesAt(height + 1), 5.minutes)
+      _      <- Await.ready(nodes.waitForSameBlockHeadersAt(height + 1), 5.minutes)
 
       _ <- Await.ready(traverse(nodes)(assertHasTxs(_, uploadedTxs.map(_.id).toSet)), 5.minutes)
     } yield ()
@@ -111,12 +112,12 @@ class WideStateGenerationSuite extends FreeSpec with WaitForHeight2 with Matcher
       utxSize <- node.utxSize
       height  <- node.height
       blockGroups <- traverse((2 to height).grouped(maxRequestSize).map { xs =>
-        (xs.head, xs.last)
+        (xs.head, xs.last, false)
       })(Function.tupled(node.blockSeq))
     } yield {
       val blocks = blockGroups.flatten.toList
       val blocksInfo = blocks.zipWithIndex
-        .map { case (x, i) => s"$i: id=${x.signature.trim}, txsSize=${x.transactions.size}, txs=${x.transactions.map(_.id.trim).mkString(", ")}" }
+        .map { case (x, i) => s"$i: id=${x.id.trim}, txsSize=${x.transactions.size}, txs=${x.transactions.map(_.id.trim).mkString(", ")}" }
 
       s"""Dump of ${node.name}:
          |UTX size: $utxSize

@@ -7,6 +7,7 @@ import com.wavesplatform.lagonaki.mocks.TestBlock
 import com.wavesplatform.state.diffs.ENOUGH_AMT
 import com.wavesplatform.transaction.GenesisTransaction
 import com.wavesplatform.transaction.TxValidationError.GenericError
+import com.wavesplatform.history.Domain.BlockchainUpdaterExt
 import org.scalacheck.Gen
 import org.scalatest._
 import org.scalatestplus.scalacheck.{ScalaCheckPropertyChecks => PropertyChecks}
@@ -17,7 +18,8 @@ class BlockchainUpdaterLiquidBlockTest
     with DomainScenarioDrivenPropertyCheck
     with Matchers
     with TransactionGen
-    with BlocksTransactionsHelpers {
+    with BlocksTransactionsHelpers
+    with NoShrink {
   import QuickTX._
   import UnsafeBlocks._
 
@@ -26,26 +28,26 @@ class BlockchainUpdaterLiquidBlockTest
       richAccount        <- accountGen
       totalTxNumber      <- Gen.chooseNum(minTx, maxTx)
       txNumberInKeyBlock <- Gen.chooseNum(0, Block.MaxTransactionsPerBlockVer3)
-      allTxs             <- Gen.listOfN(totalTxNumber, transfer(richAccount))
+      allTxs             <- Gen.listOfN(totalTxNumber, transfer(richAccount, timestamp = Gen.delay(Gen.const(ntpTime.getTimestamp()))))
     } yield {
       val (keyBlockTxs, microTxs) = allTxs.splitAt(txNumberInKeyBlock)
       val txNumberInMicros        = totalTxNumber - txNumberInKeyBlock
 
       val prevBlock = unsafeBlock(
         reference = randomSig,
-        txs = Seq(GenesisTransaction.create(richAccount, ENOUGH_AMT, 0).explicitGet()),
+        txs = Seq(GenesisTransaction.create(richAccount.toAddress, ENOUGH_AMT, 0).explicitGet()),
         signer = TestBlock.defaultSigner,
         version = 3,
         timestamp = 0
       )
 
       val (keyBlock, microBlocks) = unsafeChainBaseAndMicro(
-        totalRefTo = prevBlock.signerData.signature,
+        totalRefTo = prevBlock.signature,
         base = keyBlockTxs,
         micros = microTxs.grouped(math.max(1, txNumberInMicros / 5)).toSeq,
         signer = TestBlock.defaultSigner,
         version = 3,
-        timestamp = System.currentTimeMillis()
+        timestamp = ntpNow
       )
 
       (prevBlock, keyBlock, microBlocks)
@@ -62,7 +64,7 @@ class BlockchainUpdaterLiquidBlockTest
           } yield ()
 
           val r = microBlocks.foldLeft(blocksApplied) {
-            case (Right(_), curr) => d.blockchainUpdater.processMicroBlock(curr)
+            case (Right(_), curr) => d.blockchainUpdater.processMicroBlock(curr).map(_ => ())
             case (x, _)           => x
           }
 
@@ -72,9 +74,10 @@ class BlockchainUpdaterLiquidBlockTest
               case x =>
                 val txNumberByMicroBlock = microBlocks.map(_.transactionData.size)
                 fail(
-                  s"Unexpected result: $x. keyblock txs: ${keyBlock.transactionCount}, " +
+                  s"Unexpected result: $x. keyblock txs: ${keyBlock.transactionData.length}, " +
                     s"microblock txs: ${txNumberByMicroBlock.mkString(", ")} (total: ${txNumberByMicroBlock.sum}), " +
-                    s"total txs: ${keyBlock.transactionCount + txNumberByMicroBlock.sum}")
+                    s"total txs: ${keyBlock.transactionData.length + txNumberByMicroBlock.sum}"
+                )
             }
           }
         }
@@ -83,9 +86,11 @@ class BlockchainUpdaterLiquidBlockTest
 
   property("miner settings don't interfere with micro block processing") {
     val oneTxPerMicroSettings = MicroblocksActivatedAt0WavesSettings
-      .copy(minerSettings = MicroblocksActivatedAt0WavesSettings.minerSettings.copy(
+      .copy(
+        minerSettings = MicroblocksActivatedAt0WavesSettings.minerSettings.copy(
           maxTransactionsInMicroBlock = 1
-        ))
+        )
+      )
     forAll(preconditionsAndPayments(10, Block.MaxTransactionsPerBlockVer3)) {
       case (genBlock, keyBlock, microBlocks) =>
         withDomain(oneTxPerMicroSettings) { d =>

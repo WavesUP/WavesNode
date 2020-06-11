@@ -36,8 +36,8 @@ class HandshakeTimeoutHandler(handshakeTimeout: FiniteDuration) extends ChannelI
 
   private def cancelTimeout(): Unit = timeout.foreach(_.cancel(true))
 
-  override def channelActive(ctx: ChannelHandlerContext): Unit = {
-    log.trace(s"${id(ctx)} Scheduling handshake timeout, timeout = $handshakeTimeout")
+  override def channelRegistered(ctx: ChannelHandlerContext): Unit = {
+    log.trace(s"${id(ctx)} Scheduling handshake timeout in $handshakeTimeout")
     timeout = Some(
       ctx
         .channel()
@@ -49,14 +49,15 @@ class HandshakeTimeoutHandler(handshakeTimeout: FiniteDuration) extends ChannelI
           },
           handshakeTimeout.toMillis,
           TimeUnit.MILLISECONDS
-        ))
+        )
+    )
 
-    super.channelActive(ctx)
+    super.channelRegistered(ctx)
   }
 
-  override def channelInactive(ctx: ChannelHandlerContext): Unit = {
+  override def channelUnregistered(ctx: ChannelHandlerContext): Unit = {
     cancelTimeout()
-    super.channelInactive(ctx)
+    super.channelUnregistered(ctx)
   }
 
   override def channelRead(ctx: ChannelHandlerContext, msg: AnyRef): Unit = msg match {
@@ -68,24 +69,24 @@ class HandshakeTimeoutHandler(handshakeTimeout: FiniteDuration) extends ChannelI
   }
 }
 
-abstract class HandshakeHandler(localHandshake: Handshake,
-                                establishedConnections: ConcurrentMap[Channel, PeerInfo],
-                                peerConnections: ConcurrentMap[PeerKey, Channel],
-                                peerDatabase: PeerDatabase,
-                                allChannels: ChannelGroup)
-    extends ChannelInboundHandlerAdapter
+abstract class HandshakeHandler(
+    localHandshake: Handshake,
+    establishedConnections: ConcurrentMap[Channel, PeerInfo],
+    peerConnections: ConcurrentMap[PeerKey, Channel],
+    peerDatabase: PeerDatabase,
+    allChannels: ChannelGroup
+) extends ChannelInboundHandlerAdapter
     with ScorexLogging {
 
   import HandshakeHandler._
 
   override def channelRead(ctx: ChannelHandlerContext, msg: AnyRef): Unit = msg match {
-    case HandshakeTimeoutExpired =>
-      peerDatabase.blacklistAndClose(ctx.channel(), "Timeout expired while waiting for handshake")
     case remoteHandshake: Handshake =>
       if (localHandshake.applicationName != remoteHandshake.applicationName)
         peerDatabase.blacklistAndClose(
           ctx.channel(),
-          s"Remote application name ${remoteHandshake.applicationName} does not match local ${localHandshake.applicationName}")
+          s"Remote application name ${remoteHandshake.applicationName} does not match local ${localHandshake.applicationName}"
+        )
       else if (!versionIsSupported(remoteHandshake.applicationVersion))
         peerDatabase.blacklistAndClose(ctx.channel(), s"Remote application version ${remoteHandshake.applicationVersion} is not supported")
       else {
@@ -102,6 +103,11 @@ abstract class HandshakeHandler(localHandshake: Handshake,
               establishedConnections.put(ctx.channel(), peerInfo(remoteHandshake, ctx.channel()))
 
               ctx.channel().attr(NodeNameAttributeKey).set(remoteHandshake.nodeName)
+              ctx.channel().attr(NodeVersionAttributeKey).set(remoteHandshake.applicationVersion)
+
+              Option(ctx.channel().attr(ConnectionStartAttributeKey).get()).foreach { start =>
+                log.trace(s"Time taken to accept handshake = ${System.currentTimeMillis() - start} ms")
+              }
               ctx.channel().closeFuture().addListener { f: ChannelFuture =>
                 peerConnections.remove(key, f.channel())
                 establishedConnections.remove(f.channel())
@@ -113,8 +119,9 @@ abstract class HandshakeHandler(localHandshake: Handshake,
             } else {
               val peerAddress = ctx.remoteAddress.getOrElse("unknown")
               log.debug(s"${id(ctx)} Already connected to peer $peerAddress with nonce ${remoteHandshake.nodeNonce} on channel ${id(previousPeer)}")
-              ctx.close()
+              peerDatabase.suspendAndClose(ctx.channel())
             }
+
         }
       }
     case _ => super.channelRead(ctx, msg)
@@ -132,7 +139,9 @@ abstract class HandshakeHandler(localHandshake: Handshake,
 
 object HandshakeHandler extends ScorexLogging {
 
-  val NodeNameAttributeKey = AttributeKey.newInstance[String]("name")
+  val NodeNameAttributeKey        = AttributeKey.newInstance[String]("name")
+  val NodeVersionAttributeKey     = AttributeKey.newInstance[(Int, Int, Int)]("version")
+  val ConnectionStartAttributeKey = AttributeKey.newInstance[Long]("connectionStart")
 
   def versionIsSupported(remoteVersion: (Int, Int, Int)): Boolean =
     (remoteVersion._1 == 0 && remoteVersion._2 >= 13) || (remoteVersion._1 == 1 && remoteVersion._2 >= 0)
@@ -153,12 +162,22 @@ object HandshakeHandler extends ScorexLogging {
     )
 
   @Sharable
-  class Server(handshake: Handshake,
-               establishedConnections: ConcurrentMap[Channel, PeerInfo],
-               peerConnections: ConcurrentMap[PeerKey, Channel],
-               peerDatabase: PeerDatabase,
-               allChannels: ChannelGroup)
-      extends HandshakeHandler(handshake, establishedConnections, peerConnections, peerDatabase, allChannels) {
+  class Server(
+      handshake: Handshake,
+      establishedConnections: ConcurrentMap[Channel, PeerInfo],
+      peerConnections: ConcurrentMap[PeerKey, Channel],
+      peerDatabase: PeerDatabase,
+      allChannels: ChannelGroup
+  ) extends HandshakeHandler(handshake, establishedConnections, peerConnections, peerDatabase, allChannels) {
+
+    override def channelRead(ctx: ChannelHandlerContext, msg: AnyRef): Unit = msg match {
+      case HandshakeTimeoutExpired =>
+        peerDatabase.blacklistAndClose(ctx.channel(), "Timeout expired while waiting for handshake")
+
+      case _ =>
+        super.channelRead(ctx, msg)
+    }
+
     override protected def connectionNegotiated(ctx: ChannelHandlerContext): Unit = {
       sendLocalHandshake(ctx)
       super.connectionNegotiated(ctx)
@@ -166,16 +185,27 @@ object HandshakeHandler extends ScorexLogging {
   }
 
   @Sharable
-  class Client(handshake: Handshake,
-               establishedConnections: ConcurrentMap[Channel, PeerInfo],
-               peerConnections: ConcurrentMap[PeerKey, Channel],
-               peerDatabase: PeerDatabase,
-               allChannels: ChannelGroup)
-      extends HandshakeHandler(handshake, establishedConnections, peerConnections, peerDatabase, allChannels) {
+  class Client(
+      handshake: Handshake,
+      establishedConnections: ConcurrentMap[Channel, PeerInfo],
+      peerConnections: ConcurrentMap[PeerKey, Channel],
+      peerDatabase: PeerDatabase,
+      allChannels: ChannelGroup
+  ) extends HandshakeHandler(handshake, establishedConnections, peerConnections, peerDatabase, allChannels) {
+
+    override def channelRead(ctx: ChannelHandlerContext, msg: AnyRef): Unit = msg match {
+      case HandshakeTimeoutExpired =>
+        log.trace(s"Timeout expired while waiting for handshake: ${id(ctx.channel())}")
+        peerDatabase.suspendAndClose(ctx.channel())
+
+      case _ =>
+        super.channelRead(ctx, msg)
+    }
+
     override protected def channelActive(ctx: ChannelHandlerContext): Unit = {
       sendLocalHandshake(ctx)
+      ctx.channel().attr(ConnectionStartAttributeKey).set(System.currentTimeMillis())
       super.channelActive(ctx)
     }
   }
-
 }

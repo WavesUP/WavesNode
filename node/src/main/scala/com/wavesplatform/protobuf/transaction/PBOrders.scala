@@ -1,9 +1,6 @@
 package com.wavesplatform.protobuf.transaction
-import com.google.protobuf.ByteString
-import com.wavesplatform.account.PublicKey
-import com.wavesplatform.common.state.ByteStr
-import com.wavesplatform.transaction.Asset
-import com.wavesplatform.transaction.assets.exchange.{OrderV1, OrderV2}
+import com.wavesplatform.account.{AddressScheme, PublicKey}
+import com.wavesplatform.protobuf.order.AssetPair
 import com.wavesplatform.{transaction => vt}
 
 object PBOrders {
@@ -11,9 +8,11 @@ object PBOrders {
 
   def vanilla(order: PBOrder, version: Int = 0): VanillaOrder = {
     VanillaOrder(
+      if (version == 0) order.version.toByte else version.toByte,
       PublicKey(order.senderPublicKey.toByteArray),
       PublicKey(order.matcherPublicKey.toByteArray),
-      vt.assets.exchange.AssetPair(Asset.fromProtoId(order.getAssetPair.getAmountAssetId), Asset.fromProtoId(order.getAssetPair.getPriceAssetId)),
+      vt.assets.exchange
+        .AssetPair(PBAmounts.toVanillaAssetId(order.getAssetPair.amountAssetId), PBAmounts.toVanillaAssetId(order.getAssetPair.priceAssetId)),
       order.orderSide match {
         case PBOrder.Side.BUY             => vt.assets.exchange.OrderType.BUY
         case PBOrder.Side.SELL            => vt.assets.exchange.OrderType.SELL
@@ -24,27 +23,17 @@ object PBOrders {
       order.timestamp,
       order.expiration,
       order.getMatcherFee.longAmount,
-      order.proofs.map(_.toByteArray: ByteStr),
-      if (version == 0) order.version.toByte else version.toByte
+      PBAmounts.toVanillaAssetId(order.getMatcherFee.assetId),
+      order.proofs.map(_.toByteStr)
     )
-  }
-
-  def vanillaV1(order: PBOrder): OrderV1 = vanilla(order, 1) match {
-    case v1: OrderV1 => v1
-    case _           => ???
-  }
-
-  def vanillaV2(order: PBOrder): OrderV2 = vanilla(order, 2) match {
-    case v1: OrderV2 => v1
-    case _           => ???
   }
 
   def protobuf(order: VanillaOrder): PBOrder = {
     PBOrder(
-      chainId = 0,
-      ByteString.copyFrom(order.senderPublicKey),
-      ByteString.copyFrom(order.matcherPublicKey),
-      Some(PBOrder.AssetPair(Some(order.assetPair.amountAsset.protoId), Some(order.assetPair.priceAsset.protoId))),
+      AddressScheme.current.chainId,
+      order.senderPublicKey.toByteString,
+      order.matcherPublicKey.toByteString,
+      Some(AssetPair(PBAmounts.toPBAssetId(order.assetPair.amountAsset), PBAmounts.toPBAssetId(order.assetPair.priceAsset))),
       order.orderType match {
         case vt.assets.exchange.OrderType.BUY  => PBOrder.Side.BUY
         case vt.assets.exchange.OrderType.SELL => PBOrder.Side.SELL
@@ -55,7 +44,7 @@ object PBOrders {
       order.expiration,
       Some((order.matcherFeeAssetId, order.matcherFee)),
       order.version,
-      order.proofs.map(bs => bs: ByteString)
+      order.proofs.map(_.toByteString)
     )
   }
 }

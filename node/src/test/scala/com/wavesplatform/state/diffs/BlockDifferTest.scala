@@ -14,10 +14,7 @@ import com.wavesplatform.state.{Blockchain, Diff}
 import com.wavesplatform.transaction.GenesisTransaction
 import org.scalatest.{FreeSpecLike, Matchers}
 
-import scala.concurrent.duration._
-
 class BlockDifferTest extends FreeSpecLike with Matchers with BlockGen with WithState {
-
   private val TransactionFee = 10
 
   def randomKeyPair(): KeyPair = {
@@ -52,12 +49,12 @@ class BlockDifferTest extends FreeSpecLike with Matchers with BlockGen with With
       "height < enableMicroblocksAfterHeight - a miner should receive 100% of the current block's fee" in {
         assertDiff(testChain.init, 1000) {
           case (_, s) =>
-            s.balance(signerA) shouldBe 40
+            s.balance(signerA.toAddress) shouldBe 40
         }
 
         assertDiff(testChain, 1000) {
           case (_, s) =>
-            s.balance(signerB) shouldBe 50
+            s.balance(signerB.toAddress) shouldBe 50
         }
       }
 
@@ -79,7 +76,7 @@ class BlockDifferTest extends FreeSpecLike with Matchers with BlockGen with With
       "height = enableMicroblocksAfterHeight - a miner should receive 40% of the current block's fee only" in {
         assertDiff(testChain, 9) {
           case (_, s) =>
-            s.balance(signerB) shouldBe 44
+            s.balance(signerB.toAddress) shouldBe 44
         }
       }
 
@@ -101,12 +98,12 @@ class BlockDifferTest extends FreeSpecLike with Matchers with BlockGen with With
       "height > enableMicroblocksAfterHeight - a miner should receive 60% of previous block's fee and 40% of the current one" in {
         assertDiff(testChain.init, 4) {
           case (_, s) =>
-            s.balance(signerA) shouldBe 34
+            s.balance(signerA.toAddress) shouldBe 34
         }
 
         assertDiff(testChain, 4) {
           case (_, s) =>
-            s.balance(signerB) shouldBe 50
+            s.balance(signerB.toAddress) shouldBe 50
         }
       }
     }
@@ -116,32 +113,21 @@ class BlockDifferTest extends FreeSpecLike with Matchers with BlockGen with With
     val fs = FunctionalitySettings(
       featureCheckBlocksPeriod = ngAtHeight / 2,
       blocksForFeatureActivation = 1,
-      allowTemporaryNegativeUntil = 0L,
-      generationBalanceDepthFrom50To1000AfterHeight = 0,
-      minimalGeneratingBalanceAfter = 0L,
-      allowTransactionsFromFutureUntil = Long.MaxValue,
-      allowUnissuedAssetsUntil = 0L,
-      allowInvalidReissueInSameBlockUntilTimestamp = 0L,
-      allowMultipleLeaseCancelTransactionUntilTimestamp = 0L,
-      resetEffectiveBalancesAtHeight = 0,
-      blockVersion3AfterHeight = 0,
       preActivatedFeatures = Map[Short, Int]((2, ngAtHeight)),
-      doubleFeaturesPeriodsAfterHeight = Int.MaxValue,
-      maxTransactionTimeBackOffset = 120.minutes,
-      maxTransactionTimeForwardOffset = 90.minutes
+      doubleFeaturesPeriodsAfterHeight = Int.MaxValue
     )
     assertNgDiffState(blocks.init, blocks.last, fs)(assertion)
   }
 
   private def getTwoMinersBlockChain(from: KeyPair, to: KeyPair, numPayments: Int): Seq[Block] = {
     val ts                   = System.currentTimeMillis() - 100000
-    val genesisTx            = GenesisTransaction.create(from, Long.MaxValue - 1, ts).explicitGet()
-    val features: Set[Short] = Set[Short](2)
+    val genesisTx            = GenesisTransaction.create(from.toAddress, Long.MaxValue - 1, ts).explicitGet()
+    val features: Seq[Short] = Seq[Short](2)
 
     val paymentTxs = (1 to numPayments).map { i =>
       createWavesTransfer(
         from,
-        to,
+        to.toAddress,
         amount = 10000,
         TransactionFee,
         timestamp = ts + i * 1000

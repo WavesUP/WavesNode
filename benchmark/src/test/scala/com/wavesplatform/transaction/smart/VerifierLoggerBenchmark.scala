@@ -4,6 +4,7 @@ import java.io.BufferedWriter
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
 
+import cats.Id
 import com.wavesplatform.account.KeyPair
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils._
@@ -40,19 +41,16 @@ object VerifierLoggerBenchmark {
     val resultFile: Path       = Paths.get("log.txt")
     val writer: BufferedWriter = Files.newBufferedWriter(resultFile)
 
-    private val dataTx: DataTransaction = DataTransaction.selfSigned(
-      KeyPair(Array[Byte]()),
-      (1 to 4).map(i => BinaryDataEntry(s"data$i", ByteStr(Array.fill(1024 * 30)(1)))).toList,
-      100000000,
-      0
-    ).explicitGet()
+    private val dataTx: DataTransaction = DataTransaction
+      .selfSigned(1.toByte, KeyPair(Array[Byte]()), (1 to 4).map(i => BinaryDataEntry(s"data$i", ByteStr(Array.fill(1024 * 30)(1)))).toList, 100000000, 0)
+      .explicitGet()
 
     private val dataTxObj: Terms.CaseObj = Bindings.transactionObject(
-      RealTransactionWrapper(dataTx),
+      RealTransactionWrapper(dataTx, ???, ???, ???).explicitGet(),
       proofsEnabled = true
     )
 
-    val value: (Log, Either[String, EVALUATED]) =
+    val value: (Log[Id], Either[String, EVALUATED]) =
       (
         List.fill(500)("txVal" -> Right(dataTxObj)),
         Right(CONST_BOOLEAN(true))

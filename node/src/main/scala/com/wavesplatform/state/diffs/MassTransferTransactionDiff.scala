@@ -21,7 +21,7 @@ object MassTransferTransactionDiff {
           }
       } yield (portfolio, xfer.amount)
     }
-    val portfoliosEi = tx.transfers.traverse(parseTransfer)
+    val portfoliosEi = tx.transfers.toList.traverse(parseTransfer)
 
     portfoliosEi.flatMap { list: List[(Map[Address, Portfolio], Long)] =>
       val sender   = Address.fromPublicKey(tx.sender)
@@ -45,10 +45,7 @@ object MassTransferTransactionDiff {
 
       Either.cond(
         assetIssued,
-        Diff(tx,
-             completePortfolio,
-             scriptsRun = DiffsCommon.countScriptRuns(blockchain, tx),
-             scriptsComplexity = DiffsCommon.countScriptsComplexity(blockchain, tx)),
+        Diff(tx, completePortfolio, scriptsRun = DiffsCommon.countScriptRuns(blockchain, tx)),
         GenericError(s"Attempt to transfer a nonexistent asset")
       )
     }

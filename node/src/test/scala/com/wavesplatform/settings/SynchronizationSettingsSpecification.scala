@@ -31,11 +31,9 @@ class SynchronizationSettingsSpecification extends FlatSpec with Matchers {
         |
         |    utx-synchronizer {
         |      network-tx-cache-size = 7000000
-        |      max-buffer-size = 777
-        |      max-buffer-time = 999ms
         |      max-queue-size = 7777
-        |      parallelism = 4
         |      max-threads = 2
+        |      allow-tx-rebroadcasting = false
         |    }
         |
         |    micro-block-synchronizer {
@@ -49,7 +47,6 @@ class SynchronizationSettingsSpecification extends FlatSpec with Matchers {
 
     val settings = config.as[SynchronizationSettings]("waves.synchronization")
     settings.maxRollback should be(100)
-    settings.maxChainLength should be(101)
     settings.synchronizationTimeout should be(30.seconds)
     settings.scoreTTL should be(90.seconds)
     settings.invalidBlocksStorage shouldBe InvalidBlockStorageSettings(
@@ -66,6 +63,6 @@ class SynchronizationSettingsSpecification extends FlatSpec with Matchers {
       maxBlockCacheSize = 2
     )
 
-    settings.utxSynchronizer shouldBe UtxSynchronizerSettings(7000000, 777, 999.millis, 4, 2, 7777)
+    settings.utxSynchronizer shouldBe UtxSynchronizerSettings(7000000, 2, 7777, false)
   }
 }

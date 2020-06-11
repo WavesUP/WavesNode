@@ -4,6 +4,7 @@ import com.wavesplatform.common.utils.EitherExt2
 import com.wavesplatform.it.api.SyncHttpApi._
 import com.wavesplatform.it.sync.{someAssetAmount, _}
 import com.wavesplatform.it.transactions.BaseTransactionSuite
+import com.wavesplatform.lang.v1.estimator.v2.ScriptEstimatorV2
 import com.wavesplatform.transaction.smart.script.ScriptCompiler
 import org.scalatest.prop.TableDrivenPropertyChecks
 
@@ -35,10 +36,11 @@ class AssetUnsupportedTransactionsSuite extends BaseTransactionSuite with TableD
             ScriptCompiler(
               s"""
                  |match tx {
-                 |  case s : $tx => true
+                 |  case _: $tx => true
                  |  case _ => true
                  |}""".stripMargin,
-              isAssetScript = true
+              isAssetScript = true,
+              ScriptEstimatorV2
             ).explicitGet()._1.bytes.value.base64),
           waitForTx = true
         )
@@ -66,7 +68,7 @@ class AssetUnsupportedTransactionsSuite extends BaseTransactionSuite with TableD
         waitForTx = true
       )
       .id
-    assertBadRequestAndMessage(sender.sponsorAsset(firstAddress, assetId, 100, sponsorFee + smartFee),
+    assertBadRequestAndMessage(sender.sponsorAsset(firstAddress, assetId, 100, sponsorReducedFee + smartFee),
                                "State check failed. Reason: Sponsorship smart assets is disabled.")
 
   }

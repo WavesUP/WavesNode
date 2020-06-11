@@ -6,7 +6,6 @@ import com.wavesplatform.settings.SynchronizationSettings._
 import scala.concurrent.duration.FiniteDuration
 
 case class SynchronizationSettings(maxRollback: Int,
-                                   maxChainLength: Int,
                                    synchronizationTimeout: FiniteDuration,
                                    scoreTTL: FiniteDuration,
                                    maxBaseTargetOpt: Option[Long],
@@ -23,9 +22,7 @@ object SynchronizationSettings {
   case class HistoryReplierSettings(maxMicroBlockCacheSize: Int, maxBlockCacheSize: Int)
 
   case class UtxSynchronizerSettings(networkTxCacheSize: Int,
-                                     maxBufferSize: Int,
-                                     maxBufferTime: FiniteDuration,
-                                     parallelism: Int,
                                      maxThreads: Int,
-                                     maxQueueSize: Int)
+                                     maxQueueSize: Int,
+                                     allowTxRebroadcasting: Boolean)
 }

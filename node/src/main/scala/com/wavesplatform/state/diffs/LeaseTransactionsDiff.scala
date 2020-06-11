@@ -19,8 +19,8 @@ object LeaseTransactionsDiff {
       if (recipient == sender)
         Left(GenericError("Cannot lease to self"))
       else {
-        val lease   = blockchain.leaseBalance(tx.sender)
-        val balance = blockchain.balance(tx.sender, Waves)
+        val lease   = blockchain.leaseBalance(tx.sender.toAddress)
+        val balance = blockchain.balance(tx.sender.toAddress, Waves)
         if (balance - lease.out < tx.amount) {
           Left(GenericError(s"Cannot lease more than own: Balance:${balance}, already leased: ${lease.out}"))
         } else {
@@ -33,8 +33,7 @@ object LeaseTransactionsDiff {
               tx = tx,
               portfolios = portfolioDiff,
               leaseState = Map(tx.id() -> true),
-              scriptsRun = DiffsCommon.countScriptRuns(blockchain, tx),
-              scriptsComplexity = DiffsCommon.countScriptsComplexity(blockchain, tx)
+              scriptsRun = DiffsCommon.countScriptRuns(blockchain, tx)
             ))
         }
       }
@@ -75,8 +74,7 @@ object LeaseTransactionsDiff {
         tx = tx,
         portfolios = portfolioDiff,
         leaseState = Map(tx.leaseId -> false),
-        scriptsRun = DiffsCommon.countScriptRuns(blockchain, tx),
-        scriptsComplexity = DiffsCommon.countScriptsComplexity(blockchain, tx)
+        scriptsRun = DiffsCommon.countScriptRuns(blockchain, tx)
       )
   }
 }

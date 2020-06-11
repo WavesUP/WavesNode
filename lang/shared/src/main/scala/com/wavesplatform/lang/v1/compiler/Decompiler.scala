@@ -4,10 +4,13 @@ import cats.implicits._
 import com.wavesplatform.lang.contract.DApp
 import com.wavesplatform.lang.contract.DApp.{CallableFunction, VerifierFunction}
 import com.wavesplatform.lang.v1.FunctionHeader
-import com.wavesplatform.lang.v1.FunctionHeader.Native
+import com.wavesplatform.lang.v1.FunctionHeader.{Native, User}
 import com.wavesplatform.lang.v1.compiler.Terms._
 import com.wavesplatform.lang.v1.evaluator.FunctionIds
+import com.wavesplatform.lang.v1.evaluator.ctx.impl.waves.{ExtractedFuncPrefix, ExtractedFuncPostfix}
 import monix.eval.Coeval
+
+import scala.util.Try
 
 object Decompiler {
 
@@ -37,6 +40,7 @@ object Decompiler {
               out(fb + NEWLINE, ctx.ident))
       case Terms.LET(name, value) =>
         expr(pure(value), ctx, BracesWhenNeccessary, DontIndentFirstLine).map(e => out("let " + name + " = " + e, ctx.ident))
+      case _: FAILED_DEC => Coeval.now("FAILED_DEC")
     }
 
   private def extrTypes(Name: String, e: EXPR): Coeval[Option[List[String]]] = {
@@ -162,29 +166,54 @@ object Decompiler {
           case (List(elem), Some(listVar)) => argStr(elem).map(v => s"$v :: $listVar")
           case (elems, Some(listVar))      => listStr(elems).map(v => s"$v :: $listVar")
         }
+      case FUNCTION_CALL(`listElem`, List(list, index)) =>
+        for (l <- argStr(list); i <- argStr(index)) yield s"$l[$i]"
       case Terms.FUNCTION_CALL(func, args) =>
         val argsCoeval = argsStr(args)
         func match {
-          case FunctionHeader.User(_, name) => argsCoeval.map(as => out(name + "(" + as.mkString(", ") + ")", i))
-          case FunctionHeader.Native(name) =>
-            ctx.binaryOps.get(name) match {
-              case Some(binOp) =>
-                argsCoeval.map(as => out("(" + as.head + " " + binOp + " " + as.tail.head + ")", i))
-              case None =>
-                argsCoeval.map(
-                  as =>
-                    out(ctx.opCodes.getOrElse(name, "Native<" + name + ">") + "(" + as.mkString(", ")
-                          + ")",
-                        i))
-            }
+          case FunctionHeader.Native(id) if ctx.binaryOps.contains(id) =>
+            argsCoeval.map(as => out(s"(${as(0)} ${ctx.binaryOps(id)} ${as(1)})", i))
+
+          case FunctionHeader.User(internalName, _) if internalName == "!=" =>
+            argsCoeval.map(as => out(s"(${as(0)} != ${as(1)})", i))
+
+          case header =>
+            val name = extractFunctionName(ctx, header)
+            argsCoeval.map(as => out(s"$name(${as.mkString(", ")})", i))
         }
-      case _: Terms.ARR     => ??? // never happens
-      case _: Terms.CaseObj => ??? // never happens
+      case _: Terms.ARR       => ??? // never happens
+      case obj: Terms.CaseObj => pureOut(obj.toString, i) // never happens
     }
   }
 
+  private val extractedFuncR = s"$ExtractedFuncPrefix(\\w+)\\((.+)\\)".r
+
+  private def extractFunctionName(ctx: DecompilerContext, header: FunctionHeader) =
+    header match {
+      case inner@User(_, name) =>
+        extractedFuncR.findFirstMatchIn(name)
+          .flatMap(m =>
+            (m.group(1), m.group(2)) match {
+              case ("User", name) => Some(User(name))
+              case ("Native", id) => Try(id.toShort).toOption.map(Native)
+              case _              => None
+            }
+          )
+          .map(getFunctionName(ctx, _) + ExtractedFuncPostfix)
+          .getOrElse(getFunctionName(ctx, inner))
+
+      case h => getFunctionName(ctx, h)
+  }
+
+  private def getFunctionName(ctx: DecompilerContext, header: FunctionHeader) =
+    header match {
+      case Native(id)    => ctx.opCodes.getOrElse(id, s"Native<$id>")
+      case User(_, name) => name
+    }
+
   private val nil  = REF("nil")
   private val cons = Native(FunctionIds.CREATE_LIST)
+  private val listElem = Native(FunctionIds.GET_LIST)
 
   private def collectListArgs(args: List[EXPR]): (List[EXPR], Option[String]) = {
     def flattenRec(args: List[EXPR]): List[EXPR] = args match {

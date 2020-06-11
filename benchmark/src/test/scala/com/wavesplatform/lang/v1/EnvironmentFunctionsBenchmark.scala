@@ -1,18 +1,20 @@
 package com.wavesplatform.lang.v1
 
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.{ThreadLocalRandom, TimeUnit}
 
+import cats.Id
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2
 import com.wavesplatform.lang.v1.EnvironmentFunctionsBenchmark._
 import com.wavesplatform.lang.v1.evaluator.ctx.impl.EnvironmentFunctions
 import com.wavesplatform.lang.v1.traits._
-import com.wavesplatform.lang.v1.traits.domain.{BlockHeader, BlockInfo, Recipient, ScriptAssetInfo, Tx}
+import com.wavesplatform.lang.v1.traits.domain.{BlockInfo, Recipient, ScriptAssetInfo, Tx}
 import com.wavesplatform.lang.{Common, Global}
 import org.openjdk.jmh.annotations._
 import scorex.crypto.signatures.{Curve25519, PrivateKey, PublicKey, Signature}
 
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@OutputTimeUnit(TimeUnit.MILLISECONDS)
 @BenchmarkMode(Array(Mode.AverageTime))
 @Threads(4)
 @Fork(1)
@@ -32,6 +34,12 @@ class EnvironmentFunctionsBenchmark {
 
   @Benchmark
   def base58_26_encode_test(): String = hashTest(26, Global.base58Encode(_).explicitGet()) // for addressFromString_full_test
+
+  @Benchmark
+  def base16_decode_test(): Array[Byte] = Global.base16Decode(string32Kb, checkLength = true).explicitGet()
+
+  @Benchmark
+  def base16_encode_test(): String = Global.base16Encode(bytes8Kb, checkLength = true).explicitGet()
 
   @Benchmark
   def sha256_test(): Array[Byte] = hashTest(Global.sha256)
@@ -74,12 +82,12 @@ object EnvironmentFunctionsBenchmark {
   val DataBytesLength   = 512
   val SeedBytesLength   = 128
 
-  private val defaultEnvironment: Environment = new Environment {
+  private val defaultEnvironment: Environment[Id] = new Environment[Id] {
     override def height: Long                                                                                    = 1
     override def chainId: Byte                                                                                   = ChainId
     override def inputEntity: Environment.InputEntity                                                            = ???
     override def transactionById(id: Array[Byte]): Option[Tx]                                                    = ???
-    override def transferTransactionById(id: Array[Byte]): Option[Tx]                                            = ???
+    override def transferTransactionById(id: Array[Byte]): Option[Tx.Transfer]                                   = ???
     override def data(recipient: Recipient, key: String, dataType: DataType): Option[Any]                        = ???
     override def resolveAlias(alias: String): Either[String, Recipient.Address]                                  = ???
     override def transactionHeightById(id: Array[Byte]): Option[Long]                                            = ???
@@ -87,11 +95,18 @@ object EnvironmentFunctionsBenchmark {
     override def lastBlockOpt(): Option[BlockInfo]                                                               = ???
     override def blockInfoByHeight(height: Int): Option[BlockInfo]                                               = ???
     override def accountBalanceOf(addressOrAlias: Recipient, assetId: Option[Array[Byte]]): Either[String, Long] = ???
-    override def blockHeaderParser(bytes: Array[Byte]): Option[BlockHeader]                                      = ???
+    override def accountWavesBalanceOf(addressOrAlias: Recipient): Either[String, Environment.BalanceDetails]    = ???
     override def tthis: Recipient.Address                                                                        = ???
+    override def multiPaymentAllowed: Boolean                                                                    = ???
+    override def transferTransactionFromProto(b: Array[Byte]): Option[Tx.Transfer]                               = ???
+    override def txId: ByteStr                                                                                   = ByteStr(new Array[Byte](64))
   }
 
   val environmentFunctions = new EnvironmentFunctions(defaultEnvironment)
+
+  val string32Kb: String = "FEDCBA9876543210" * (32 * 1024 / 16)
+
+  val bytes8Kb: Array[Byte] = ("FEDCBA9876543210" * (8 * 1024 / 16)).getBytes(StandardCharsets.UTF_8)
 
   def randomBytes(length: Int): Array[Byte] = {
     val bytes = Array.fill[Byte](length)(0)

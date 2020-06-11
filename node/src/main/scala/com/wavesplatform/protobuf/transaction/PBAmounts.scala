@@ -1,26 +1,24 @@
 package com.wavesplatform.protobuf.transaction
 import com.google.protobuf.ByteString
+import com.wavesplatform.protobuf.Amount
 import com.wavesplatform.transaction.Asset
 import com.wavesplatform.transaction.Asset.{IssuedAsset, Waves}
+import com.wavesplatform.protobuf.utils.PBImplicitConversions._
 
 object PBAmounts {
-  def toPBAssetId(asset: Asset): AssetId = asset match {
-    case Asset.IssuedAsset(id) =>
-      AssetId().withIssuedAsset(ByteString.copyFrom(id))
-
-    case Asset.Waves =>
-      AssetId().withWaves(com.google.protobuf.empty.Empty())
+  def toPBAssetId(asset: Asset): ByteString = asset match {
+    case Asset.IssuedAsset(id) => id.toByteString
+    case Asset.Waves           => ByteString.EMPTY
   }
 
-  def toVanillaAssetId(assetId: AssetId): Asset = assetId.asset match {
-    case AssetId.Asset.Waves(_)             => Waves
-    case AssetId.Asset.IssuedAsset(assetId) => IssuedAsset(assetId.toByteArray)
-    case _ => throw new IllegalArgumentException
+  def toVanillaAssetId(byteStr: ByteString): Asset = {
+    if (byteStr.isEmpty) Waves
+    else IssuedAsset(byteStr.toByteStr)
   }
 
   def fromAssetAndAmount(asset: Asset, amount: Long): Amount =
-    Amount(Some(toPBAssetId(asset)), amount)
+    Amount(toPBAssetId(asset), amount)
 
   def toAssetAndAmount(value: Amount): (Asset, Long) =
-    (toVanillaAssetId(value.getAssetId), value.amount)
+    (toVanillaAssetId(value.assetId), value.amount)
 }

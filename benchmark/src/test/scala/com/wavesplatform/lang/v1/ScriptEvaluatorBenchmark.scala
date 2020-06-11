@@ -2,16 +2,19 @@ package com.wavesplatform.lang.v1
 
 import java.util.concurrent.TimeUnit
 
+import cats.Id
 import cats.kernel.Monoid
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58
 import com.wavesplatform.common.utils.EitherExt2
 import com.wavesplatform.lang.Global
-import com.wavesplatform.lang.directives.values.V1
+import com.wavesplatform.lang.directives.values.{V1, V4}
 import com.wavesplatform.lang.v1.FunctionHeader.Native
 import com.wavesplatform.lang.v1.ScriptEvaluatorBenchmark._
 import com.wavesplatform.lang.v1.compiler.Terms._
+import com.wavesplatform.lang.v1.evaluator.Contextful.NoContext
 import com.wavesplatform.lang.v1.evaluator.EvaluatorV1
+import com.wavesplatform.lang.v1.evaluator.EvaluatorV1._
 import com.wavesplatform.lang.v1.evaluator.FunctionIds.{FROMBASE58, SIGVERIFY, TOBASE58}
 import com.wavesplatform.lang.v1.evaluator.ctx.EvaluationContext
 import com.wavesplatform.lang.v1.evaluator.ctx.impl.{CryptoContext, PureContext}
@@ -22,8 +25,9 @@ import scorex.crypto.signatures.Curve25519
 import scala.util.Random
 
 object ScriptEvaluatorBenchmark {
-  val version = V1
-  val pureEvalContext = PureContext.build(Global, V1).evaluationContext
+  val version                                           = V1
+  val pureEvalContext: EvaluationContext[NoContext, Id] = PureContext.build(Global, V1).evaluationContext
+  val evaluatorV1: EvaluatorV1[Id, NoContext]           = new EvaluatorV1[Id, NoContext]()
 }
 
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
@@ -34,30 +38,33 @@ object ScriptEvaluatorBenchmark {
 @Measurement(iterations = 10)
 class ScriptEvaluatorBenchmark {
   @Benchmark
-  def bigSum(st: BigSum, bh: Blackhole): Unit = bh.consume(EvaluatorV1[EVALUATED](pureEvalContext, st.expr))
+  def bigSum(st: BigSum, bh: Blackhole): Unit = bh.consume(evaluatorV1.apply[EVALUATED](pureEvalContext, st.expr))
 
   @Benchmark
-  def nestedBlocks(st: NestedBlocks, bh: Blackhole): Unit = bh.consume(EvaluatorV1[EVALUATED](st.context, st.expr))
+  def nestedBlocks(st: NestedBlocks, bh: Blackhole): Unit = bh.consume(evaluatorV1.apply[EVALUATED](st.context, st.expr))
 
   @Benchmark
-  def signatures(st: Signatures, bh: Blackhole): Unit = bh.consume(EvaluatorV1[EVALUATED](st.context, st.expr))
+  def signatures(st: Signatures, bh: Blackhole): Unit = bh.consume(evaluatorV1.apply[EVALUATED](st.context, st.expr))
 
   @Benchmark
-  def base58encode(st: Base58Perf, bh: Blackhole): Unit = bh.consume(EvaluatorV1[EVALUATED](st.context, st.encode))
+  def base58encode(st: Base58Perf, bh: Blackhole): Unit = bh.consume(evaluatorV1.apply[EVALUATED](st.context, st.encode))
 
   @Benchmark
-  def base58decode(st: Base58Perf, bh: Blackhole): Unit = bh.consume(EvaluatorV1[EVALUATED](st.context, st.decode))
+  def base58decode(st: Base58Perf, bh: Blackhole): Unit = bh.consume(evaluatorV1.apply[EVALUATED](st.context, st.decode))
 
   @Benchmark
-  def stringConcat(st: Concat, bh: Blackhole): Unit = bh.consume(EvaluatorV1[EVALUATED](st.context, st.strings))
+  def stringConcat(st: Concat, bh: Blackhole): Unit = bh.consume(evaluatorV1.apply[EVALUATED](st.context, st.strings))
 
   @Benchmark
-  def bytesConcat(st: Concat, bh: Blackhole): Unit = bh.consume(EvaluatorV1[EVALUATED](st.context, st.bytes))
+  def bytesConcat(st: Concat, bh: Blackhole): Unit = bh.consume(evaluatorV1.apply[EVALUATED](st.context, st.bytes))
+
+  @Benchmark
+  def listMedian(st: Median, bh: Blackhole): Unit = bh.consume(evaluatorV1.apply[EVALUATED](st.context, st.expr))
 }
 
 @State(Scope.Benchmark)
 class NestedBlocks {
-  val context: EvaluationContext = pureEvalContext
+  val context: EvaluationContext[NoContext, Id] = pureEvalContext
 
   val expr: EXPR = {
     val blockCount = 300
@@ -71,7 +78,8 @@ class NestedBlocks {
 
 @State(Scope.Benchmark)
 class Base58Perf {
-  val context: EvaluationContext = Monoid.combine(pureEvalContext, CryptoContext.build(Global, version).evaluationContext)
+  val context: EvaluationContext[NoContext, Id] =
+    Monoid.combine(pureEvalContext, CryptoContext.build(Global, version).evaluationContext)
 
   val encode: EXPR = {
     val base58Count = 120
@@ -102,7 +110,10 @@ class Base58Perf {
       .map { i =>
         val b = new Array[Byte](64)
         Random.nextBytes(b)
-        LET("v" + i, FUNCTION_CALL(PureContext.sizeBytes, List(FUNCTION_CALL(Native(FROMBASE58), List(CONST_STRING(Base58.encode(b)).explicitGet())))))
+        LET(
+          "v" + i,
+          FUNCTION_CALL(PureContext.sizeBytes, List(FUNCTION_CALL(Native(FROMBASE58), List(CONST_STRING(Base58.encode(b)).explicitGet()))))
+        )
       }
       .foldRight[EXPR](sum) { case (let, e) => BLOCK(let, e) }
   }
@@ -110,7 +121,8 @@ class Base58Perf {
 
 @State(Scope.Benchmark)
 class Signatures {
-  val context: EvaluationContext = Monoid.combine(pureEvalContext, CryptoContext.build(Global, version).evaluationContext)
+  val context: EvaluationContext[NoContext, Id] =
+    Monoid.combine(pureEvalContext, CryptoContext.build(Global, version).evaluationContext)
 
   val expr: EXPR = {
     val sigCount = 20
@@ -150,7 +162,7 @@ class Signatures {
 
 @State(Scope.Benchmark)
 class Concat {
-  val context: EvaluationContext = pureEvalContext
+  val context: EvaluationContext[NoContext, Id] = pureEvalContext
 
   private val Steps = 180
 
@@ -173,4 +185,18 @@ class Concat {
       CONST_BYTESTR(ByteStr.fromBytes(0)).explicitGet(),
       Steps
     )
+}
+
+@State(Scope.Benchmark)
+class Median {
+  val context: EvaluationContext[NoContext, Id] = PureContext.build(Global, V4).evaluationContext
+
+  val expr: EXPR = {
+    val listOfLong = (1 to 100).map(_ => CONST_LONG(Random.nextLong()))
+
+    FUNCTION_CALL(
+      PureContext.getListMedian,
+      List(ARR(listOfLong, false).explicitGet())
+    )
+  }
 }

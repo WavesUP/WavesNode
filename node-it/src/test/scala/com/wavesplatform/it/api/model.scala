@@ -1,7 +1,12 @@
 package com.wavesplatform.it.api
 
+import com.wavesplatform.account.PublicKey
 import com.wavesplatform.common.state.ByteStr
+import com.wavesplatform.state.DataEntry
 import com.wavesplatform.transaction.assets.exchange.AssetPair
+import com.wavesplatform.transaction.transfer.Attachment
+import com.wavesplatform.transaction.transfer.MassTransferTransaction.Transfer
+import io.grpc.{Metadata, Status => GrpcStatus}
 import play.api.libs.json._
 
 import scala.util.{Failure, Success}
@@ -10,6 +15,8 @@ import scala.util.{Failure, Success}
 // to work around https://github.com/scalatest/scalatest/issues/556
 case class UnexpectedStatusCodeException(requestMethod: String, requestUrl: String, statusCode: Int, responseBody: String)
     extends Exception(s"Request: $requestMethod $requestUrl; Unexpected status code ($statusCode): $responseBody")
+
+case class GrpcStatusRuntimeException(status: GrpcStatus, metaData: Metadata) extends Exception(s"$status $metaData")
 
 case class Status(blockchainHeight: Int, stateHeight: Int, updatedTimestamp: Long, updatedDate: String)
 object Status {
@@ -46,17 +53,25 @@ object CompiledScript {
   implicit val compiledScriptFormat: Format[CompiledScript] = Json.format
 }
 
+case class EstimatedScript(script: String, scriptText: String, complexity: Long, extraFee: Long)
+object EstimatedScript {
+  implicit val estimatedScriptFormat: Format[EstimatedScript] = Json.format
+}
+
 case class DecompiledScript(script: String)
 object DecompiledScript {
   implicit val decompiledScriptFormat: Format[DecompiledScript] = Json.format
 }
 
-case class FullAssetInfo(assetId: String,
-                         balance: Long,
-                         reissuable: Boolean,
-                         minSponsoredAssetFee: Option[Long],
-                         sponsorBalance: Option[Long],
-                         quantity: Long)
+case class FullAssetInfo(
+    assetId: String,
+    balance: Long,
+    reissuable: Boolean,
+    minSponsoredAssetFee: Option[Long],
+    sponsorBalance: Option[Long],
+    quantity: Long,
+    issueTransaction: Option[Transaction]
+)
 object FullAssetInfo {
   implicit val fullAssetInfoFormat: Format[FullAssetInfo] = Json.format
 }
@@ -76,28 +91,205 @@ object ScriptAssetInfo {
   implicit val scriptAssetInfoFormat: Format[ScriptAssetInfo] = Json.format
 }
 
-case class AssetInfo(assetId: String,
-                     issueHeight: Int,
-                     issueTimestamp: Long,
-                     issuer: String,
-                     name: String,
-                     description: String,
-                     decimals: Int,
-                     reissuable: Boolean,
-                     quantity: Long,
-                     minSponsoredAssetFee: Option[Long],
-                     scriptDetails: Option[ScriptAssetInfo])
+case class AssetInfo(
+    assetId: String,
+    issueHeight: Int,
+    issueTimestamp: Long,
+    issuer: String,
+    name: String,
+    description: String,
+    decimals: Int,
+    reissuable: Boolean,
+    quantity: Long,
+    originTransactionId: String,
+    minSponsoredAssetFee: Option[Long],
+    scriptDetails: Option[ScriptAssetInfo]
+) {
+  def isNFT: Boolean = decimals == 0 && quantity == 1 && !reissuable
+}
 object AssetInfo {
   implicit val AssetInfoFormat: Format[AssetInfo] = Json.format
 }
 
-case class Transaction(`type`: Int, id: String, fee: Long, timestamp: Long, sender: Option[String])
+class Transaction(val _type: Int,
+                  val  id: String,
+                  val  chainId: Option[Byte],
+                  val  fee: Long,
+                  val  timestamp: Long,
+                  val  sender: Option[String],
+                  val  version: Option[Byte],
+                  val  name: Option[String],
+                  val  amount: Option[Long],
+                  val  description: Option[String],
+                  val  typedAttachment: Option[Attachment],
+                  val  attachment: Option[String],
+                  val  price: Option[Long],
+                  val  sellMatcherFee: Option[Long],
+                  val  buyMatcherFee: Option[Long],
+                  val  sellOrderMatcherFee: Option[Long],
+                  val  buyOrderMatcherFee: Option[Long],
+                  val  data: Option[Seq[DataEntry[_]]],
+                  val  minSponsoredAssetFee: Option[Long],
+                  val  transfers: Option[Seq[Transfer]],
+                  val  totalAmount: Option[Long],
+                  val  senderPublicKey: Option[String],
+                  val  recipient: Option[String],
+                  val  proofs: Option[Seq[String]]
+                      ) {
+                        import Transaction._
+                        override def toString = Json.toJson(this).toString
+                        override def equals(x: Any) = {
+                          x match {
+                            case t: Transaction => id == t.id
+                            case _ => false
+                          }
+                        }
+                      }
 object Transaction {
-  implicit val transactionFormat: Format[Transaction] = Json.format
+  def apply(_type: Int,
+                  id: String,
+                  chainId: Option[Byte],
+                  fee: Long,
+                  timestamp: Long,
+                  sender: Option[String],
+                  version: Option[Byte],
+                  name: Option[String],
+                  amount: Option[Long],
+                  description: Option[String],
+                  typedAttachment: Option[Attachment],
+                  attachment: Option[String],
+                  price: Option[Long],
+                  sellMatcherFee: Option[Long],
+                  buyMatcherFee: Option[Long],
+                  sellOrderMatcherFee: Option[Long],
+                  buyOrderMatcherFee: Option[Long],
+                  data: Option[Seq[DataEntry[_]]],
+                  minSponsoredAssetFee: Option[Long],
+                  transfers: Option[Seq[Transfer]],
+                  totalAmount: Option[Long],
+                  senderPublicKey: Option[String],
+                  recipient: Option[String],
+                  proofs: Option[Seq[String]]
+                      ) : Transaction = new Transaction(_type,
+                  id,
+                  chainId,
+                  fee,
+                  timestamp,
+                  sender,
+                  version,
+                  name,
+                  amount,
+                  description,
+                  typedAttachment,
+                  attachment,
+                  price,
+                  sellMatcherFee,
+                  buyMatcherFee,
+                  sellOrderMatcherFee,
+                  buyOrderMatcherFee,
+                  data,
+                  minSponsoredAssetFee,
+                  transfers,
+                  totalAmount,
+                  senderPublicKey,
+                  recipient,
+                  proofs: Option[Seq[String]]
+                      )
+
+  implicit val transactionFormat: Format[Transaction] = Format(
+    Reads(jsv =>
+      for {
+        _type <- (jsv \ "type").validate[Int]
+        id <- (jsv \ "id").validate[String]
+        chainId <- (jsv \ "chainId").validateOpt[Byte]
+        fee <- (jsv \ "fee").validate[Long]
+        timestamp <- (jsv \ "timestamp").validate[Long]
+        sender <- (jsv \ "sender").validateOpt[String]
+        version <- (jsv \ "version").validateOpt[Byte]
+        name <- (jsv \ "name").validateOpt[String]
+        amount <- (jsv \ "amount").validateOpt[Long]
+        description <- (jsv \ "description").validateOpt[String]
+        typedAttachment <- version match {
+          case Some(v) if v > 2 && _type == 4 => (jsv \ "attachment").validateOpt[Attachment]
+          case Some(v) if v > 1 && _type == 11 => (jsv \ "attachment").validateOpt[Attachment]
+          case _ => JsSuccess(None)
+        }
+        attachment <- version match {
+          case Some(v) if v < 3 && _type == 4 => (jsv \ "attachment").validateOpt[String]
+          case Some(v) if v < 2 && _type == 11 => (jsv \ "attachment").validateOpt[String]
+          case _ => JsSuccess(None)
+        }
+        price <- (jsv \ "price").validateOpt[Long]
+        sellMatcherFee <- (jsv \ "sellMatcherFee").validateOpt[Long]
+        buyMatcherFee <- (jsv \ "buyMatcherFee").validateOpt[Long]
+        sellOrderMatcherFee <- (jsv \ "order2" \ "matcherFee").validateOpt[Long]
+        buyOrderMatcherFee <- (jsv \ "order1" \  "matcherFee").validateOpt[Long]
+        data <- (jsv \ "data").validateOpt[Seq[DataEntry[_]]]
+        minSponsoredAssetFee <- (jsv \ "minSponsoredAssetFee").validateOpt[Long]
+        transfers <- (jsv \ "transfers").validateOpt[Seq[Transfer]]
+        totalAmount <- (jsv \ "totalAmount").validateOpt[Long]
+        senderPublicKey <- (jsv \ "senderPublicKey").validateOpt[String]
+        recipient <- (jsv \ "recipient").validateOpt[String]
+        proofs <- (jsv \ "proofs").validateOpt[Seq[String]]
+      }
+        yield new Transaction(
+          _type,
+          id,
+          chainId,
+          fee,
+          timestamp,
+          sender,
+          version,
+          name,
+          amount,
+          description,
+          typedAttachment,
+          attachment,
+          price,
+          sellMatcherFee,
+          buyMatcherFee,
+          sellOrderMatcherFee,
+          buyOrderMatcherFee,
+          data,
+          minSponsoredAssetFee,
+          transfers,
+          totalAmount,
+          senderPublicKey,
+          recipient,
+          proofs
+        )),
+    Writes { t =>
+      Json.obj(
+        "type" -> t._type,
+        "id" ->  t.id,
+        "chainId" ->  t.chainId,
+        "fee" ->  t.fee,
+        "timestamp" ->  t.timestamp,
+        "sender" ->  t.sender,
+        "version" ->  t.version,
+        "name" ->  t.name,
+        "amount" ->  t.amount,
+        "description" ->  t.description,
+        "attachment" ->  t.attachment,
+        "price" ->  t.price,
+        "sellMatcherFee" ->  t.sellMatcherFee,
+        "buyMatcherFee" ->  t.buyMatcherFee,
+        "sellOrderFee" ->  t.sellOrderMatcherFee,
+        "buyOrderFee" ->  t.buyOrderMatcherFee,
+        "data" ->  t.data,
+        "minSponsoredAssetFee" ->  t.minSponsoredAssetFee,
+        "transfers" ->  t.transfers,
+        "totalAmount" ->  t.totalAmount,
+        "senderPublicKey" ->  t.senderPublicKey,
+        "recipient" ->  t.recipient,
+        "proofs" ->  t.proofs
+        )
+    }
+  )
 }
 
 trait TxInfo {
-  def `type`: Int
+  def _type: Int
   def id: String
   def fee: Long
   def timestamp: Long
@@ -108,33 +300,115 @@ trait TxInfo {
   def script: Option[String]
 }
 
-case class TransactionInfo(`type`: Int,
-                           id: String,
-                           fee: Long,
-                           timestamp: Long,
-                           sender: Option[String],
-                           height: Int,
-                           minSponsoredAssetFee: Option[Long],
-                           recipient: Option[String],
-                           script: Option[String]) extends TxInfo
+case class TransactionInfo(
+    _type: Int,
+    id: String,
+    chainId: Option[Byte],
+    fee: Long,
+    timestamp: Long,
+    sender: Option[String],
+    name: Option[String],
+    description: Option[String],
+    amount: Option[Long],
+    price: Option[Long],
+    sellMatcherFee: Option[Long],
+    buyMatcherFee: Option[Long],
+    sellOrderMatcherFee: Option[Long],
+    buyOrderMatcherFee: Option[Long],
+    height: Int,
+    minSponsoredAssetFee: Option[Long],
+    recipient: Option[String],
+    script: Option[String],
+    version: Option[Byte],
+    data: Option[Seq[DataEntry[_]]],
+    transfers: Option[Seq[Transfer]],
+    totalAmount: Option[Long]
+) extends TxInfo
 object TransactionInfo {
-  implicit val format: Format[TransactionInfo] = Json.format
+  implicit val transactionFormat: Format[TransactionInfo] = Format(
+    Reads(jsv =>
+      for {
+        _type <- (jsv \ "type").validate[Int]
+        id <- (jsv \ "id").validate[String]
+        fee <- (jsv \ "fee").validate[Long]
+        timestamp <- (jsv \ "timestamp").validate[Long]
+        sender <- (jsv \ "sender").validateOpt[String]
+        height <- (jsv \ "height").validate[Int]
+        minSponsoredAssetFee <- (jsv \ "minSponsoredAssetFee").validateOpt[Long]
+        name <- (jsv \ "name").validateOpt[String]
+        version <- (jsv \ "version").validateOpt[Byte]
+        amount <- version match {
+          case Some(v) if v < 3 => (jsv \ "amount").validateOpt[Long]
+          case _ => (jsv \ "quantity").validateOpt[Long]
+        }
+        description <- (jsv \ "description").validateOpt[String]
+        recipient <- (jsv \ "recipient").validateOpt[String]
+        script <- (jsv \ "script").validateOpt[String]
+        chainId <- (jsv \ "chainId").validateOpt[Byte]
+        price <- (jsv \ "price").validateOpt[Long]
+        sellMatcherFee <- (jsv \ "sellMatcherFee").validateOpt[Long]
+        buyMatcherFee <- (jsv \ "buyMatcherFee").validateOpt[Long]
+        sellOrderMatcherFee <- (jsv \ "order2" \ "matcherFee").validateOpt[Long]
+        buyOrderMatcherFee <- (jsv \ "order1" \  "matcherFee").validateOpt[Long]
+        data <- (jsv \ "data").validateOpt[Seq[DataEntry[_]]]
+        transfers <- (jsv \ "transfers").validateOpt[Seq[Transfer]]
+        totalAmount <- (jsv \ "totalAmount").validateOpt[Long]
+      }
+        yield TransactionInfo(
+          _type,
+          id,
+          chainId,
+          fee,
+          timestamp,
+          sender,
+          name,
+          description,
+          amount,
+          price,
+          sellMatcherFee,
+          buyMatcherFee,
+          sellOrderMatcherFee,
+          buyOrderMatcherFee,
+          height,
+          minSponsoredAssetFee,
+          recipient,
+          script,
+          version,
+          data,
+          transfers,
+          totalAmount
+        )),
+    Json.writes[TransactionInfo]
+  )
 }
 
-case class OrderInfo(id: String,
-                     version: Option[Byte],
-                     sender: String,
-                     senderPublicKey: String,
-                     matcherPublicKey: String,
-                     assetPair: AssetPairResponse,
-                     orderType: String,
-                     amount: Long,
-                     price: Long,
-                     timestamp: Long,
-                     expiration: Long,
-                     matcherFee: Long,
-                     signature: String,
-                     proofs: Option[Seq[String]])
+case class TransactionStatus(
+    id: String,
+    status: String,
+    confirmations: Option[Int],
+    height: Option[Int],
+    applicationStatus: Option[String]
+)
+object TransactionStatus {
+  implicit val format: Format[TransactionStatus] = Json.format
+}
+
+case class OrderInfo(
+    id: String,
+    version: Option[Byte],
+    sender: String,
+    senderPublicKey: String,
+    matcherPublicKey: String,
+    assetPair: AssetPairResponse,
+    orderType: String,
+    amount: Long,
+    price: Long,
+    timestamp: Long,
+    expiration: Long,
+    matcherFee: Long,
+    signature: String,
+    proofs: Option[Seq[String]]
+)
 object OrderInfo {
   implicit val transactionFormat: Format[OrderInfo] = Json.format
 }
@@ -144,30 +418,272 @@ object AssetPairResponse {
   implicit val pairResponseFormat: Format[AssetPairResponse] = Json.format
 }
 
-
-
-case class StateChangesDetails(data: Seq[DataResponse], transfers: Seq[TransfersInfoResponse])
+case class StateChangesDetails(
+    data: Seq[DataResponse],
+    transfers: Seq[TransfersInfoResponse],
+    issues: Seq[IssueInfoResponse],
+    reissues: Seq[ReissueInfoResponse],
+    burns: Seq[BurnInfoResponse],
+    sponsorFees: Seq[SponsorFeeResponse],
+    error: Option[ErrorMessageInfoResponse]
+)
 object StateChangesDetails {
-  implicit val stateChangeResponseFormat: Format[StateChangesDetails] = Json.format[StateChangesDetails]
+  implicit val stateChangeResponseFormat: Reads[StateChangesDetails] = Json.reads[StateChangesDetails]
 }
 
-case class DebugStateChanges(`type`: Int,
-                             id: String,
-                             fee: Long,
-                             timestamp: Long,
-                             sender: Option[String],
-                             height: Int,
-                             minSponsoredAssetFee: Option[Long],
-                             recipient: Option[String],
-                             script: Option[String],
-                             stateChanges: Option[StateChangesDetails]) extends TxInfo
-object DebugStateChanges{
-  implicit val debugStateChanges: Format[DebugStateChanges] = Json.format
+case class DebugStateChanges(
+    _type: Int,
+    id: String,
+    fee: Long,
+    timestamp: Long,
+    sender: Option[String],
+    height: Int,
+    minSponsoredAssetFee: Option[Long],
+    recipient: Option[String],
+    script: Option[String],
+    stateChanges: Option[StateChangesDetails]
+) extends TxInfo
+object DebugStateChanges {
+  implicit val debugStateChanges: Reads[DebugStateChanges] =
+    Reads(jsv =>
+      for {
+        _type <- (jsv \ "type").validate[Int]
+        id <- (jsv \ "id").validate[String]
+        fee <- (jsv \ "fee").validate[Long]
+        timestamp <- (jsv \ "timestamp").validate[Long]
+        sender <- (jsv \ "sender").validateOpt[String]
+        height <- (jsv \ "height").validate[Int]
+        minSponsoredAssetFee <- (jsv \ "minSponsoredAssetFee").validateOpt[Long]
+        recipient <- (jsv \ "recipient").validateOpt[String]
+        script <- (jsv \ "script").validateOpt[String]
+        stateChanges <- (jsv \ "stateChanges").validateOpt[StateChangesDetails]
+      }
+        yield DebugStateChanges(
+          _type,
+          id,
+          fee,
+          timestamp,
+          sender,
+          height,
+          minSponsoredAssetFee,
+          recipient,
+          script,
+          stateChanges
+        )
+    )
 }
 
-case class DataResponse(`type`: String, value: Long, key: String)
+case class IssueTransactionInfo(`type`: Int,
+                            id: String,
+                            chainId: Option[Byte],
+                            senderPublicKey: String,
+                            quantity: Long,
+                            fee: Long,
+                            description: String,
+                            version: Byte,
+                            sender: String,
+                            feeAssetId: Option[String],
+                            reissuable: Boolean,
+                            assetId: String,
+                            decimals: Byte,
+                            name: String,
+                            timestamp: Long)
+object IssueTransactionInfo {
+  implicit val issueTransactionFormat: Format[IssueTransactionInfo] = Json.format
+}
+
+case class TransferTransactionInfo(
+                            _type: Int,
+                            id: String,
+                            chainId: Option[Byte],
+                            fee: Long,
+                            timestamp: Long,
+                            sender: Option[String],
+                            amount: Option[Long],
+                            height: Int,
+                            recipient: Option[String],
+                            version: Option[Byte],
+                            typedAttachment: Option[Attachment],
+                            attachment: Option[String],
+                            proofs: Option[Seq[String]]
+                          )
+object TransferTransactionInfo {
+  implicit val transactionFormat: Format[TransferTransactionInfo] = Format(
+    Reads(jsv =>
+      for {
+        _type <- (jsv \ "type").validate[Int]
+        id <- (jsv \ "id").validate[String]
+        chainId <- (jsv \ "chainId").validateOpt[Byte]
+        fee <- (jsv \ "fee").validate[Long]
+        timestamp <- (jsv \ "timestamp").validate[Long]
+        sender <- (jsv \ "sender").validateOpt[String]
+        height <- (jsv \ "height").validate[Int]
+        amount <- (jsv \ "amount").validateOpt[Long]
+        recipient <- (jsv \ "recipient").validateOpt[String]
+        version <- (jsv \ "version").validateOpt[Byte]
+        chainId <- (jsv \ "chainId").validateOpt[Byte]
+        typedAttachment <- version match {
+          case Some(v) if v > 2 && _type == 4 => (jsv \ "attachment").validateOpt[Attachment]
+          case Some(v) if v > 1 && _type == 11 => (jsv \ "attachment").validateOpt[Attachment]
+          case _ => JsSuccess(None)
+        }
+        attachment <- version match {
+          case Some(v) if v < 3 && _type == 4 => (jsv \ "attachment").validateOpt[String]
+          case Some(v) if v < 2 && _type == 11 => (jsv \ "attachment").validateOpt[String]
+          case _ => JsSuccess(None)
+        }
+        proofs <- (jsv \ "proofs").validateOpt[Seq[String]]
+      }
+        yield TransferTransactionInfo(
+          _type,
+          id,
+          chainId,
+          fee,
+          timestamp,
+          sender,
+          amount,
+          height,
+          recipient,
+          version,
+          typedAttachment,
+          attachment,
+          proofs
+        )),
+    Json.writes[TransferTransactionInfo]
+  )
+}
+
+case class MassTransferTransactionInfo(
+                                _type: Int,
+                                id: String,
+                                chainId: Option[Byte],
+                                fee: Long,
+                                timestamp: Long,
+                                sender: Option[String],
+                                amount: Option[Long],
+                                height: Int,
+                                recipient: Option[String],
+                                version: Option[Byte],
+                                typedAttachment: Option[Attachment],
+                                attachment: Option[String],
+                                transfers: Option[Seq[Transfer]],
+                                totalAmount: Option[Long]
+                              )
+object MassTransferTransactionInfo {
+  implicit val transactionFormat: Format[MassTransferTransactionInfo] = Format(
+    Reads(jsv =>
+      for {
+        _type <- (jsv \ "type").validate[Int]
+        id <- (jsv \ "id").validate[String]
+        fee <- (jsv \ "fee").validate[Long]
+        timestamp <- (jsv \ "timestamp").validate[Long]
+        sender <- (jsv \ "sender").validateOpt[String]
+        height <- (jsv \ "height").validate[Int]
+        amount <- (jsv \ "amount").validateOpt[Long]
+        recipient <- (jsv \ "recipient").validateOpt[String]
+        version <- (jsv \ "version").validateOpt[Byte]
+        chainId <- (jsv \ "chainId").validateOpt[Byte]
+        typedAttachment <- version match {
+          case Some(v) if v > 2 && _type == 4 => (jsv \ "attachment").validateOpt[Attachment]
+          case Some(v) if v > 1 && _type == 11 => (jsv \ "attachment").validateOpt[Attachment]
+          case _ => JsSuccess(None)
+        }
+        attachment <- version match {
+          case Some(v) if v < 3 && _type == 4 => (jsv \ "attachment").validateOpt[String]
+          case Some(v) if v < 2 && _type == 11 => (jsv \ "attachment").validateOpt[String]
+          case _ => JsSuccess(None)
+        }
+        transfers <- (jsv \ "transfers").validateOpt[Seq[Transfer]]
+        totalAmount <- (jsv \ "totalAmount").validateOpt[Long]
+      }
+        yield MassTransferTransactionInfo(
+          _type,
+          id,
+          chainId,
+          fee,
+          timestamp,
+          sender,
+          amount,
+          height,
+          recipient,
+          version,
+          typedAttachment,
+          attachment,
+          transfers,
+          totalAmount
+        )),
+    Json.writes[MassTransferTransactionInfo]
+  )
+}
+
+case class BurnTransactionInfo(
+                            _type: Int,
+                            id: String,
+                            chainId: Option[Byte],
+                            fee: Long,
+                            timestamp: Long,
+                            sender: String,
+                            senderPublicKey: String,
+                            amount: Long,
+                            height: Int,
+                            assetId: String,
+                            feeAssetId: Option[String],
+                            version: Option[Byte]
+                          )
+object BurnTransactionInfo {
+  implicit val transactionFormat: Format[BurnTransactionInfo] = Format(
+    Reads(jsv =>
+      for {
+        _type <- (jsv \ "type").validate[Int]
+        id <- (jsv \ "id").validate[String]
+        fee <- (jsv \ "fee").validate[Long]
+        timestamp <- (jsv \ "timestamp").validate[Long]
+        sender <- (jsv \ "sender").validate[String]
+        senderPublicKey <- (jsv \ "senderPublicKey").validate[String]
+        height <- (jsv \ "height").validate[Int]
+        version <- (jsv \ "version").validateOpt[Byte]
+        amount <- version match {
+          case Some(v) if v < 3 => (jsv \ "amount").validate[Long]
+          case _ => (jsv \ "quantity").validate[Long]
+        }
+        assetId <- (jsv \ "assetId").validate[String]
+        feeAssetId <- (jsv \ "feeAssetId").validateOpt[String]
+        chainId <- (jsv \ "chainId").validateOpt[Byte]
+      }
+        yield BurnTransactionInfo(
+          _type,
+          id,
+          chainId,
+          fee,
+          timestamp,
+          sender,
+          senderPublicKey,
+          amount,
+          height,
+          assetId,
+          feeAssetId,
+          version
+        )),
+    Json.writes[BurnTransactionInfo]
+  )
+}
+
+case class DataResponse(`type`: String, value: Any, key: String)
 object DataResponse {
-  implicit val dataResponseFormat: Format[DataResponse] = Json.format
+  implicit val dataResponseFormat: Reads[DataResponse] = Reads {
+    case JsObject(fields) =>
+      val key = fields("key").asInstanceOf[JsString].value
+      val `type` = fields("type").asInstanceOf[JsString].value
+      val value = `type` match {
+        case "binary"  => fields("value").asInstanceOf[JsString].value
+        case "string"  => fields("value").asInstanceOf[JsString].value
+        case "integer" => fields("value").asInstanceOf[JsNumber].value.toLongExact
+        case "boolean" => fields("value").asInstanceOf[JsBoolean].value
+        case _         => JsError()
+      }
+      JsSuccess(DataResponse(`type`, value, key))
+    case _ => JsError()
+  }
 }
 
 case class TransfersInfoResponse(address: String, asset: Option[String], amount: Long)
@@ -181,46 +697,200 @@ object TransfersInfoResponse {
   implicit val transfersInfoResponseFormat: Format[TransfersInfoResponse] = Json.format
 }
 
-case class ExchangeTransaction(`type`: Int,
-                               version: Option[Byte],
-                               id: String,
-                               sender: String,
-                               senderPublicKey: String,
-                               fee: Long,
-                               timestamp: Long,
-                               proofs: Option[Seq[String]],
-                               order1: OrderInfo,
-                               order2: OrderInfo,
-                               amount: Long,
-                               price: Long,
-                               buyMatcherFee: Long,
-                               sellMatcherFee: Long,
-                               height: Option[Int])
+case class IssueInfoResponse(
+    assetId: String,
+    name: String,
+    description: String,
+    quantity: Long,
+    decimals: Int,
+    isReissuable: Boolean,
+    compiledScript: Option[String],
+    nonce: Long
+)
+object IssueInfoResponse {
+  implicit val IssueInfoFormat: Format[IssueInfoResponse] = Json.format
+}
+
+case class ReissueInfoResponse(assetId: String, isReissuable: Boolean, quantity: Long)
+object ReissueInfoResponse {
+  implicit val reissueInfoFormat: Format[ReissueInfoResponse] = Json.format
+}
+
+case class BurnInfoResponse(assetId: String, quantity: Long)
+object BurnInfoResponse {
+  implicit val burnInfoFormat: Format[BurnInfoResponse] = Json.format
+}
+
+case class SponsorFeeResponse(assetId: String, minSponsoredAssetFee: Option[Long])
+object SponsorFeeResponse {
+  implicit val sponsorFeeFormat: Format[SponsorFeeResponse] = Json.format
+}
+
+case class ErrorMessageInfoResponse(code: Int, text: String)
+object ErrorMessageInfoResponse {
+  implicit val errorMessageInfoFormat: Format[ErrorMessageInfoResponse] = Json.format
+}
+
+case class ExchangeTransaction(
+    `type`: Int,
+    version: Option[Byte],
+    id: String,
+    sender: String,
+    senderPublicKey: String,
+    fee: Long,
+    timestamp: Long,
+    proofs: Option[Seq[String]],
+    order1: OrderInfo,
+    order2: OrderInfo,
+    amount: Long,
+    price: Long,
+    buyMatcherFee: Long,
+    sellMatcherFee: Long,
+    height: Option[Int]
+)
 object ExchangeTransaction {
   implicit val transactionFormat: Format[ExchangeTransaction] = Json.format
 }
 
-case class Block(signature: String,
-                 height: Int,
-                 timestamp: Long,
-                 generator: String,
-                 transactions: Seq[Transaction],
-                 fee: Long,
-                 features: Option[Seq[Short]])
+case class Block(
+    id: String,
+    signature: String,
+    reference: String,
+    height: Int,
+    timestamp: Long,
+    generator: String,
+    generatorPublicKey: PublicKey,
+    transactionCount: Int,
+    generationSignature: Option[String],
+    transactionsRoot: Option[String],
+    baseTarget: Option[Int],
+    blocksize: Int,
+    transactions: Seq[Transaction],
+    fee: Long,
+    totalFee: Option[Long],
+    features: Option[Set[Short]],
+    reward: Option[Long],
+    desiredReward: Option[Long],
+    vrf: Option[String],
+    version: Option[Byte] = None
+)
 object Block {
-  implicit val blockFormat: Format[Block] = Json.format
+  import PublicKey._
+
+  implicit val blockFormat: Format[Block] = Format(
+    Reads( jsv =>
+      for {
+        id <- (jsv \ "id").validate[String]
+        signature <- (jsv \ "signature").validate[String]
+        reference <- (jsv \ "reference").validate[String]
+        height <- (jsv \ "height").validate[Int]
+        timestamp <- (jsv \ "timestamp").validate[Long]
+        generator <- (jsv \ "generator").validate[String]
+        generatorPublicKey <- (jsv \ "generatorPublicKey").validate[PublicKey]
+        transactionCount <- (jsv \ "transactionCount").validate[Int]
+        blocksize <- (jsv \ "blocksize").validate[Int]
+        features <- (jsv \ "features").validateOpt[Set[Short]]
+        reward <- (jsv \ "reward").validateOpt[Long]
+        desiredReward <- (jsv \ "desiredReward").validateOpt[Long]
+        totalFee <- (jsv \ "totalFee").validateOpt[Long]
+        fee <- (jsv \ "fee").validate[Long]
+        transactions <- (jsv \ "transactions").validate[Seq[Transaction]]
+        version <- (jsv \ "version").validateOpt[Byte]
+        generationSignature <- (jsv \ "nxt-consensus" \ "generation-signature").validateOpt[String]
+        baseTarget <- (jsv \ "nxt-consensus" \ "base-target").validateOpt[Int]
+        transactionsRoot <- (jsv \ "transactionsRoot").validateOpt[String]
+        vrf <- (jsv \ "VRF").validateOpt[String]
+      } yield Block(
+        id,
+        signature,
+        reference,
+        height,
+        timestamp,
+        generator,
+        generatorPublicKey,
+        transactionCount,
+        generationSignature,
+        transactionsRoot,
+        baseTarget,
+        blocksize,
+        transactions,
+        fee,
+        totalFee,
+        features,
+        reward,
+        desiredReward,
+        vrf,
+        version
+      )
+    ),
+    Json.writes[Block]
+  )
 }
 
-case class BlockHeaders(signature: String,
-                        height: Int,
-                        timestamp: Long,
-                        generator: String,
-                        transactionCount: Int,
-                        blocksize: Int,
-                        features: Option[Set[Short]],
-                        totalFee: Long)
-object BlockHeaders {
-  implicit val blockHeadersFormat: Format[BlockHeaders] = Json.format
+case class BlockHeader(
+    id: String,
+    signature: String,
+    height: Int,
+    timestamp: Long,
+    generator: String,
+    transactionCount: Int,
+    generationSignature: Option[String],
+    transactionsRoot: Option[String],
+    baseTarget: Option[Int],
+    blocksize: Int,
+    features: Option[Set[Short]],
+    reward: Option[Long],
+    desiredReward: Option[Long],
+    totalFee: Long,
+    vrf: Option[String],
+    version: Option[Byte] = None
+)
+object BlockHeader {
+  implicit val blockHeadersFormat: Format[BlockHeader] = Format(
+    Reads( jsv =>
+      for {
+        id <- (jsv \ "id").validate[String]
+        signature <- (jsv \ "signature").validate[String]
+        height <- (jsv \ "height").validate[Int]
+        timestamp <- (jsv \ "timestamp").validate[Long]
+        generator <- (jsv \ "generator").validate[String]
+        transactionCount <- (jsv \ "transactionCount").validate[Int]
+        blocksize <- (jsv \ "blocksize").validate[Int]
+        features <- (jsv \ "features").validateOpt[Set[Short]]
+        reward <- (jsv \ "reward").validateOpt[Long]
+        desiredReward <- (jsv \ "desiredReward").validateOpt[Long]
+        totalFee <- (jsv \ "totalFee").validate[Long]
+        version <- (jsv \ "version").validateOpt[Byte]
+        generationSignature <- (jsv \ "nxt-consensus" \ "generation-signature").validateOpt[String]
+        baseTarget <- (jsv \ "nxt-consensus" \ "base-target").validateOpt[Int]
+        transactionsRoot <- (jsv \ "transactionsRoot").validateOpt[String]
+        vrf <- (jsv \ "VRF").validateOpt[String]
+      } yield BlockHeader(
+        id,
+        signature,
+        height,
+        timestamp,
+        generator,
+        transactionCount,
+        generationSignature,
+        transactionsRoot,
+        baseTarget,
+        blocksize,
+        features,
+        reward,
+        desiredReward,
+        totalFee,
+        vrf,
+        version
+      )
+    ),
+    Json.writes[BlockHeader]
+  )
+}
+
+case class GenerationSignatureResponse(generationSignature: String)
+object GenerationSignatureResponse {
+  implicit val generationSignatureResponseFormat: Format[GenerationSignatureResponse] = Json.format
 }
 
 case class MatcherMessage(id: String)
@@ -253,13 +923,15 @@ object AssetDecimalsInfo {
   implicit val assetDecimalsInfoResponseFormat: Format[AssetDecimalsInfo] = Json.format
 }
 
-case class MarketData(amountAsset: String,
-                      amountAssetName: String,
-                      priceAsset: String,
-                      priceAssetName: String,
-                      created: Long,
-                      amountAssetInfo: Option[AssetDecimalsInfo],
-                      priceAssetInfo: Option[AssetDecimalsInfo])
+case class MarketData(
+    amountAsset: String,
+    amountAssetName: String,
+    priceAsset: String,
+    priceAssetName: String,
+    created: Long,
+    amountAssetInfo: Option[AssetDecimalsInfo],
+    priceAssetInfo: Option[AssetDecimalsInfo]
+)
 object MarketData {
   implicit val marketData: Format[MarketData] = Json.format
 }
@@ -274,14 +946,16 @@ object MessageMatcherResponse {
   implicit val messageMatcherResponseFormat: Format[MessageMatcherResponse] = Json.format
 }
 
-case class OrderbookHistory(id: String,
-                            `type`: String,
-                            amount: Long,
-                            price: Long,
-                            timestamp: Long,
-                            filled: Int,
-                            status: String,
-                            assetPair: AssetPair) {
+case class OrderbookHistory(
+    id: String,
+    `type`: String,
+    amount: Long,
+    price: Long,
+    timestamp: Long,
+    filled: Int,
+    status: String,
+    assetPair: AssetPair
+) {
   def isActive: Boolean = status == "PartiallyFilled" || status == "Accepted"
 }
 object OrderbookHistory {
@@ -318,19 +992,21 @@ object OrderBookResponse {
   implicit val orderBookResponseFormat: Format[OrderBookResponse] = Json.format
 }
 
-case class MarketStatusResponse(lastPrice: Option[Long],
-                                lastSide: Option[String],
-                                bid: Option[Long],
-                                bidAmount: Option[Long],
-                                ask: Option[Long],
-                                askAmount: Option[Long])
-object MarketStatusResponse {
-  implicit val marketResponseFormat: Format[MarketStatusResponse] = Json.format
+case class MerkleProofResponse(id: String, transactionIndex: Int, merkleProof: Seq[String])
+object  MerkleProofResponse {
+  implicit val merkleProofResponseFormat: Format[MerkleProofResponse] = Json.format
 }
 
-case class DebugInfo(stateHeight: Long, stateHash: Long)
-object DebugInfo {
-  implicit val debugInfoFormat: Format[DebugInfo] = Json.format
+case class MarketStatusResponse(
+    lastPrice: Option[Long],
+    lastSide: Option[String],
+    bid: Option[Long],
+    bidAmount: Option[Long],
+    ask: Option[Long],
+    askAmount: Option[Long]
+)
+object MarketStatusResponse {
+  implicit val marketResponseFormat: Format[MarketStatusResponse] = Json.format
 }
 
 case class BlacklistedPeer(hostname: String, timestamp: Long, reason: String)
@@ -341,6 +1017,16 @@ object BlacklistedPeer {
 case class State(address: String, miningBalance: Long, timestamp: Long)
 object State {
   implicit val StateFormat: Format[State] = Json.format
+}
+
+case class GeneratingBalance(address: String, balance: Long)
+object GeneratingBalance {
+  implicit val GeneratingBalanceFormat: Format[GeneratingBalance] = Json.format
+}
+
+case class BalanceHistory(height: Int, balance: Long)
+object BalanceHistory {
+  implicit val BalanceHistoryFormat: Format[BalanceHistory] = Json.format
 }
 
 case class TransactionSerialize(bytes: Array[Int])

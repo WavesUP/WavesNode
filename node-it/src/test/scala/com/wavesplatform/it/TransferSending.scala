@@ -2,9 +2,10 @@ package com.wavesplatform.it
 
 import java.util.concurrent.ThreadLocalRandom
 
+import com.google.common.primitives.Ints
 import com.typesafe.config.Config
 import com.wavesplatform.account._
-import com.wavesplatform.api.http.assets.SignedTransferV2Request
+import com.wavesplatform.api.http.requests.TransferRequest
 import com.wavesplatform.common.utils.{Base58, EitherExt2}
 import com.wavesplatform.it.TransferSending.Req
 import com.wavesplatform.it.api.AsyncHttpApi._
@@ -13,6 +14,8 @@ import com.wavesplatform.transaction.Asset.Waves
 import com.wavesplatform.transaction.transfer._
 import com.wavesplatform.utils.ScorexLogging
 import org.scalatest.Suite
+import play.api.libs.json.Json.toJson
+import play.api.libs.json.{JsObject, Json}
 
 import scala.concurrent.Future
 import scala.util.Random
@@ -42,7 +45,7 @@ trait TransferSending extends ScorexLogging {
 
     val sourceAndDest = (1 to n).map { _ =>
       val destPk = Array.fill[Byte](seedSize)(Random.nextInt(Byte.MaxValue).toByte)
-      Address.fromPublicKey(PublicKey(destPk)).address
+      Address.fromPublicKey(PublicKey(destPk)).stringRepr
     }
 
     val requests = sourceAndDest.foldLeft(List.empty[Req]) {
@@ -64,7 +67,7 @@ trait TransferSending extends ScorexLogging {
 
     val sourceAndDest = (1 to n).map { _ =>
       val Seq((srcConfig, _), (_, destPrivateKey)) = Random.shuffle(srcDest).take(2)
-      (srcConfig, destPrivateKey.address)
+      (srcConfig, destPrivateKey.toAddress.toString)
     }
 
     val requests = sourceAndDest.foldLeft(List.empty[Req]) {
@@ -80,17 +83,18 @@ trait TransferSending extends ScorexLogging {
   }
 
   def generateTransfersToRandomAddresses(n: Int, excludeSrcAddresses: Set[String]): Seq[Req] = {
-    val fee      = 100000
-    val seedSize = 32
+    val fee = 100000
 
     val seeds = NodeConfigs.Default.collect {
       case config if !excludeSrcAddresses.contains(config.getString("address")) => config.getString("account-seed")
     }
 
-    val sourceAndDest = (1 to n).map { _ =>
+    val prefix = Ints.toByteArray(Random.nextInt())
+
+    val sourceAndDest = (1 to n).map { id =>
       val srcSeed  = Random.shuffle(seeds).head
-      val destPk   = Array.fill[Byte](seedSize)(Random.nextInt(Byte.MaxValue).toByte)
-      val destAddr = Address.fromPublicKey(PublicKey(destPk)).address
+      val destPk   = prefix ++ Ints.toByteArray(id) ++ new Array[Byte](24)
+      val destAddr = Address.fromPublicKey(PublicKey(destPk)).stringRepr
 
       (srcSeed, destAddr)
     }
@@ -111,42 +115,57 @@ trait TransferSending extends ScorexLogging {
       .map {
         case (x, i) =>
           createSignedTransferRequest(
-            TransferTransactionV2
+            TransferTransaction
               .selfSigned(
-                assetId = Waves,
+                version = 2.toByte,
                 sender = KeyPair(Base58.decode(x.senderSeed)),
                 recipient = AddressOrAlias.fromString(x.targetAddress).explicitGet(),
+                asset = Waves,
                 amount = x.amount,
-                timestamp = start + i,
-                feeAssetId = Waves,
-                feeAmount = x.fee,
-                attachment = if (includeAttachment) {
-                  Array.fill(TransferTransaction.MaxAttachmentSize)(ThreadLocalRandom.current().nextInt().toByte)
-                } else Array.emptyByteArray
+                feeAsset = Waves,
+                fee = x.fee,
+                attachment =
+                  if (includeAttachment)
+                    Some(Attachment.Bin(Array.fill(TransferTransaction.MaxAttachmentSize)(ThreadLocalRandom.current().nextInt().toByte)))
+                  else None,
+                timestamp = start + i
               )
               .right
-              .get)
+              .get
+          )
       }
-      .grouped(requests.size / nodes.size)
+      .grouped(requests.size / nodes.size + 1)
       .toSeq
 
     Future
-      .traverse(nodes.zip(requestGroups)) { case (node, request) => node.batchSignedTransfer(request) }
+      .traverse(nodes.zip(requestGroups)) {
+        case (node, request) =>
+          request.foldLeft(Future.successful(Seq.empty[Transaction])) {
+            case (f, r) =>
+              for {
+                prevTransactions <- f
+                tx               <- node.signedBroadcast(toJson(r).as[JsObject] ++ Json.obj("type" -> TransferTransaction.typeId.toInt))
+              } yield tx +: prevTransactions
+          }
+      }
       .map(_.flatten)
   }
 
-  protected def createSignedTransferRequest(tx: TransferTransactionV2): SignedTransferV2Request = {
+  protected def createSignedTransferRequest(tx: TransferTransaction): TransferRequest = {
     import tx._
-    SignedTransferV2Request(
-      Base58.encode(tx.sender),
-      assetId.maybeBase58Repr,
+    TransferRequest(
+      Some(2.toByte),
+      None,
+      Some(tx.sender.toString),
       recipient.stringRepr,
+      Some(assetId),
       amount,
-      feeAssetId.maybeBase58Repr,
+      Some(feeAssetId),
       fee,
-      timestamp,
-      attachment.headOption.map(_ => Base58.encode(attachment)),
-      proofs.base58().toList
+      attachment,
+      Some(timestamp),
+      None,
+      Some(proofs)
     )
   }
 

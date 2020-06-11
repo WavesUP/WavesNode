@@ -5,6 +5,7 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils._
 import com.wavesplatform.it.api.SyncHttpApi._
 import com.wavesplatform.it.transactions.BaseTransactionSuite
+import com.wavesplatform.lang.v1.estimator.v2.ScriptEstimatorV2
 import com.wavesplatform.state.BinaryDataEntry
 import com.wavesplatform.transaction.DataTransaction
 import com.wavesplatform.transaction.smart.SetScriptTransaction
@@ -65,22 +66,11 @@ class ScriptLogSuite extends BaseTransactionSuite with CancelAfterFailure {
         BinaryDataEntry(s"k$i", ByteStr(bytes))
       }).toList
 
-    val initialData = DataTransaction
-      .selfSigned(
-        smart,
-        data,
-        ENOUGH_FEE,
-        System.currentTimeMillis()
-      )
-      .explicitGet()
+    sender.putData(smart.toAddress.toString, data, ENOUGH_FEE, waitForTx = true).id
 
-    val dtx1_id = sender.signedBroadcast(initialData.json()).id
-
-    nodes.waitForHeightAriseAndTxPresent(dtx1_id)
-
-    val script = ScriptCompiler(scriptSrc, isAssetScript = false).explicitGet()._1
+    val script = ScriptCompiler(scriptSrc, isAssetScript = false, ScriptEstimatorV2).explicitGet()._1
     val setScriptTransaction = SetScriptTransaction
-      .selfSigned(smart, Some(script), setScriptFee, System.currentTimeMillis())
+      .selfSigned(1.toByte, smart, Some(script), setScriptFee, System.currentTimeMillis())
       .explicitGet()
 
     val sstx = sender.signedBroadcast(setScriptTransaction.json()).id
@@ -93,18 +83,13 @@ class ScriptLogSuite extends BaseTransactionSuite with CancelAfterFailure {
 
     def mkInvData() =
       DataTransaction
-        .selfSigned(
-          smart,
-          List(
-            BinaryDataEntry("pk", ByteStr(smart.publicKey)),
+        .selfSigned(1.toByte, smart, List(
+            BinaryDataEntry("pk", smart.publicKey),
             BinaryDataEntry("sig", ByteStr(signature)),
-          ),
-          ENOUGH_FEE,
-          System.currentTimeMillis()
-        )
+          ), ENOUGH_FEE, System.currentTimeMillis())
         .explicitGet()
 
-    assertBadRequest(sender.signedBroadcast(mkInvData().json()))
+    assertApiErrorRaised(sender.signedBroadcast(mkInvData().json()))
 
     def async = com.wavesplatform.it.api.AsyncHttpApi.NodeAsyncHttpApi _
 
@@ -117,7 +102,7 @@ class ScriptLogSuite extends BaseTransactionSuite with CancelAfterFailure {
     val result = Future
       .sequence(requests)
       .map {
-        _.forall(_ == TransactionNotAllowedByAccountScript.ErrorCode)
+        _.forall(_ == TransactionNotAllowedByAccountScript.Id)
       }
 
     Await.result(result, 1.minute) shouldBe true

@@ -1,9 +1,7 @@
 package com.wavesplatform.transaction
 
-import com.google.protobuf.ByteString
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.Base58
-import com.wavesplatform.protobuf.transaction.AssetId
 import com.wavesplatform.transaction.assets.exchange.AssetPair
 import net.ceedubs.ficus.readers.ValueReader
 import play.api.libs.json._
@@ -16,7 +14,8 @@ object Asset {
   case object Waves                         extends Asset
 
   implicit val assetReads: Reads[IssuedAsset] = Reads {
-    case JsString(str) if str.length > AssetIdStringLength => JsError("invalid.feeAssetId")
+    case JsString(str) if str.length > AssetIdStringLength =>
+      JsError(s"Too long assetId: length of $str exceeds $AssetIdStringLength")
     case JsString(str) =>
       Base58.tryDecodeWithLimit(str) match {
         case Success(arr) => JsSuccess(IssuedAsset(ByteStr(arr)))
@@ -38,8 +37,10 @@ object Asset {
     case IssuedAsset(id) => JsString(id.toString)
   }
 
-  implicit val assetJsonFormat: Format[IssuedAsset] = Format(assetReads, assetWrites)
-  implicit val assetIdJsonFormat: Format[Asset]     = Format(assetIdReads, assetIdWrites)
+  object Formats {
+    implicit val assetJsonFormat: Format[IssuedAsset] = Format(assetReads, assetWrites)
+    implicit val assetIdJsonFormat: Format[Asset]     = Format(assetIdReads, assetIdWrites)
+  }
 
   implicit val assetReader: ValueReader[Asset] = { (cfg, path) =>
     AssetPair.extractAssetId(cfg getString path).fold(ex => throw new Exception(ex.getMessage), identity)
@@ -53,25 +54,10 @@ object Asset {
     maybeBStr.fold[Asset](Waves)(IssuedAsset)
   }
 
-  def fromProtoId(byteStr: ByteString): Asset = {
-    if (byteStr.isEmpty) Waves
-    else IssuedAsset(byteStr.toByteArray)
-  }
-
-  def fromProtoId(assetId: AssetId): Asset = assetId.asset match {
-    case AssetId.Asset.IssuedAsset(bs) => fromProtoId(bs)
-    case _ => Waves
-  }
-
   implicit class AssetIdOps(private val ai: Asset) extends AnyVal {
     def byteRepr: Array[Byte] = ai match {
       case Waves           => Array(0: Byte)
       case IssuedAsset(id) => (1: Byte) +: id.arr
-    }
-
-    def protoId: AssetId = ai match {
-      case IssuedAsset(id) => AssetId().withIssuedAsset(ByteString.copyFrom(id))
-      case Waves => AssetId().withWaves(com.google.protobuf.empty.Empty())
     }
 
     def compatId: Option[ByteStr] = ai match {

@@ -1,5 +1,6 @@
 package com.wavesplatform.generator
 
+import java.net.InetSocketAddress
 import java.util.concurrent.Executors
 
 import cats.implicits.showInterpolator
@@ -13,11 +14,13 @@ import com.wavesplatform.generator.utils.Universe
 import com.wavesplatform.network.client.NetworkSender
 import com.wavesplatform.settings.WavesSettings
 import com.wavesplatform.transaction.Transaction
+import com.wavesplatform.features.EstimatorProvider._
 import com.wavesplatform.utils.{LoggerFacade, NTP}
 import monix.execution.Scheduler
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import net.ceedubs.ficus.readers.{EnumerationReader, NameMapper}
+import net.ceedubs.ficus.readers.{EnumerationReader, NameMapper, ValueReader}
+import org.asynchttpclient.AsyncHttpClient
 import org.asynchttpclient.Dsl.asyncHttpClient
 import org.slf4j.LoggerFactory
 import scopt.OptionParser
@@ -29,17 +32,14 @@ import scala.util.{Failure, Random, Success}
 object TransactionsGeneratorApp extends App with ScoptImplicits with FicusImplicits with EnumerationReader {
 
   // IDEA bugs
-  implicit val inetSocketAddressReader        = com.wavesplatform.settings.inetSocketAddressReader
-  implicit val readConfigInHyphen: NameMapper = net.ceedubs.ficus.readers.namemappers.implicits.hyphenCase
-  implicit val httpClient                     = asyncHttpClient()
+  implicit val inetSocketAddressReader: ValueReader[InetSocketAddress] = com.wavesplatform.settings.inetSocketAddressReader
+  implicit val readConfigInHyphen: NameMapper                          = net.ceedubs.ficus.readers.namemappers.implicits.hyphenCase
+  implicit val httpClient: AsyncHttpClient                             = asyncHttpClient()
 
   val log = LoggerFacade(LoggerFactory.getLogger("generator"))
 
   val parser = new OptionParser[GeneratorSettings]("generator") {
     head("TransactionsGenerator - Waves load testing transactions generator")
-    opt[Int]('i', "iterations").valueName("<iterations>").text("number of iterations").action { (v, c) =>
-      c.copy(worker = c.worker.copy(iterations = v))
-    }
     opt[FiniteDuration]('d', "delay").valueName("<delay>").text("delay between iterations").action { (v, c) =>
       c.copy(worker = c.worker.copy(delay = v))
     }
@@ -104,7 +104,7 @@ object TransactionsGeneratorApp extends App with ScoptImplicits with FicusImplic
         },
         opt[Boolean]("first-run").abbr("first").optional().text("generate set multisig script transaction").action { (x, c) =>
           c.copy(multisig = c.multisig.copy(firstRun = x))
-        },
+        }
       )
 
     cmd("oracle")
@@ -118,7 +118,7 @@ object TransactionsGeneratorApp extends App with ScoptImplicits with FicusImplic
         },
         opt[Boolean]("enabled").abbr("e").optional().text("DataEnty value").action { (x, c) =>
           c.copy(multisig = c.multisig.copy(firstRun = x))
-        },
+        }
       )
 
     cmd("swarm")
@@ -147,7 +147,7 @@ object TransactionsGeneratorApp extends App with ScoptImplicits with FicusImplic
       .load()
       .as[GeneratorSettings]("generator")
 
-  val wavesSettings = WavesSettings.fromRootConfig(ConfigFactory.load())
+  val wavesSettings = WavesSettings.default()
 
   parser.parse(args, defaultConfig) match {
     case None => parser.failure("Failed to parse command line parameters")
@@ -165,20 +165,22 @@ object TransactionsGeneratorApp extends App with ScoptImplicits with FicusImplic
           .load("preconditions.conf")
           .as[Option[PGenSettings]]("preconditions")(optionValueReader(Preconditions.preconditionsReader))
 
-      val (universe, initialTransactions) = preconditions
-        .fold((UniverseHolder(), List.empty[Transaction]))(Preconditions.mk(_, time))
+      val estimator = wavesSettings.estimator
+
+      val (universe, initialUniTransactions, initialTailTransactions) = preconditions
+        .fold((UniverseHolder(), List.empty[Transaction], List.empty[Transaction]))(Preconditions.mk(_, time, estimator))
 
       Universe.Accounts = universe.accounts
       Universe.IssuedAssets = universe.issuedAssets
       Universe.Leases = universe.leases
 
       val generator: TransactionGenerator = finalConfig.mode match {
-        case Mode.NARROW   => new NarrowTransactionGenerator(finalConfig.narrow, finalConfig.privateKeyAccounts)
+        case Mode.NARROW   => NarrowTransactionGenerator(finalConfig.narrow, finalConfig.privateKeyAccounts, time, estimator)
         case Mode.WIDE     => new WideTransactionGenerator(finalConfig.wide, finalConfig.privateKeyAccounts)
         case Mode.DYN_WIDE => new DynamicWideTransactionGenerator(finalConfig.dynWide, finalConfig.privateKeyAccounts)
-        case Mode.MULTISIG => new MultisigTransactionGenerator(finalConfig.multisig, finalConfig.privateKeyAccounts)
-        case Mode.ORACLE   => new OracleTransactionGenerator(finalConfig.oracle, finalConfig.privateKeyAccounts)
-        case Mode.SWARM    => new SmartGenerator(finalConfig.swarm, finalConfig.privateKeyAccounts)
+        case Mode.MULTISIG => new MultisigTransactionGenerator(finalConfig.multisig, finalConfig.privateKeyAccounts, estimator)
+        case Mode.ORACLE   => new OracleTransactionGenerator(finalConfig.oracle, finalConfig.privateKeyAccounts, estimator)
+        case Mode.SWARM    => new SmartGenerator(finalConfig.swarm, finalConfig.privateKeyAccounts, estimator)
       }
 
       val threadPool                            = Executors.newFixedThreadPool(Math.max(1, finalConfig.sendTo.size))
@@ -205,20 +207,28 @@ object TransactionsGeneratorApp extends App with ScoptImplicits with FicusImplic
         }
       }
 
-      log.info(s"Preconditions: $initialTransactions")
+      val initialGenTransactions     = generator.initial
+      val initialGenTailTransactions = generator.tailInitial
+
+      log.info(s"Universe precondition transactions size: ${initialUniTransactions.size}")
+      log.info(s"Generator precondition transactions size: ${initialGenTransactions.size}")
+      log.info(s"Universe precondition tail transactions size: ${initialTailTransactions.size}")
+      log.info(s"Generator precondition tail transactions size: ${initialGenTailTransactions.size}")
 
       val workers = finalConfig.sendTo.map {
         case NodeAddress(node, nodeRestUrl) =>
           log.info(s"Creating worker: ${node.getHostString}:${node.getPort}")
           // new Worker(finalConfig.worker, sender, node, generator, initialTransactions.map(RawBytes.from))
-          new NewWorker(
+          new Worker(
             finalConfig.worker,
             Iterator.continually(generator.next()).flatten,
             sender,
             node,
             nodeRestUrl,
             () => canContinue,
-            initialTransactions
+            initialUniTransactions ++ initialGenTransactions,
+            finalConfig.privateKeyAccounts.map(_.toAddress.stringRepr),
+            initialTailTransactions ++ initialGenTailTransactions
           )
       }
 
@@ -241,5 +251,4 @@ object TransactionsGeneratorApp extends App with ScoptImplicits with FicusImplic
             close(1)
         }
   }
-
 }
