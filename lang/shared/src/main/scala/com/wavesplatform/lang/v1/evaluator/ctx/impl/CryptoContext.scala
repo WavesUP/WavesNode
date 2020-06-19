@@ -123,24 +123,78 @@ object CryptoContext {
       }
     }
 
-    def toBase58StringF: BaseFunction[NoContext] = NativeFunction("toBase58String", 10, TOBASE58, STRING, ("bytes", BYTESTR)) {
-      case CONST_BYTESTR(bytes: ByteStr) :: Nil => global.base58Encode(bytes.arr).flatMap(CONST_STRING(_))
-      case xs                                   => notImplemented[Id]("toBase58String(bytes: ByteVector)", xs)
+    val rsaVerifyL: Array[BaseFunction[NoContext]] = lgen(
+      Array(16, 32, 64, 128),
+      (n => (s"rsaVerify_${n._1}Kb", (RSAVERIFY_LIM + n._2).toShort)),
+      ({
+        case 16  => 500
+        case 32  => 550
+        case 64  => 625
+        case 128 => 750
+      }),
+      (n => {
+        case _ :: CONST_BYTESTR(msg: ByteStr) :: _ => Either.cond(msg.size <= n * 1024, (), s"Invalid message size = ${msg.size} bytes, must be not greater than $n KB")
+        case xs =>
+          notImplemented[Id, Unit](s"rsaVerify_${n}Kb(digest: DigestAlgorithmType, message: ByteVector, sig: ByteVector, pub: ByteVector)", xs)
+      }),
+      BOOLEAN,
+      ("digest", digestAlgorithmType(V4)),
+      ("message", BYTESTR),
+      ("sig", BYTESTR),
+      ("pub", BYTESTR)
+    ) {
+      case (digestAlg: CaseObj) :: CONST_BYTESTR(msg: ByteStr) :: CONST_BYTESTR(sig: ByteStr) :: CONST_BYTESTR(pub: ByteStr) :: Nil =>
+        algFromCO(digestAlg) flatMap { alg =>
+          Try(global.rsaVerify(alg, msg.arr, sig.arr, pub.arr)).toEither
+            .bimap(_ => "Illegal input params", CONST_BOOLEAN)
+        }
+      case xs => notImplemented[Id, EVALUATED](s"rsaVerify(digest: DigestAlgorithmType, message: ByteVector, sig: ByteVector, pub: ByteVector)", xs)
+    }
+
+    def toBase58StringF: BaseFunction[NoContext] =
+      NativeFunction(
+        "toBase58String",
+        Map[StdLibVersion, Long](V1 -> 10L, V2 -> 10L, V3 -> 10L, V4 -> 3L),
+        TOBASE58,
+        STRING,
+        ("bytes", BYTESTR)
+      ) {
+      case CONST_BYTESTR(bytes: ByteStr) :: Nil => global.base58Encode(bytes.arr).flatMap(CONST_STRING(_, reduceLimit = version >= V4))
+      case xs                                   => notImplemented[Id, EVALUATED]("toBase58String(bytes: ByteVector)", xs)
     }
 
     def fromBase58StringF: BaseFunction[NoContext] =
-      NativeFunction("fromBase58String", 10, FROMBASE58, BYTESTR, ("str", STRING)) {
+      NativeFunction(
+        "fromBase58String",
+        Map[StdLibVersion, Long](V1 -> 10L, V2 -> 10L, V3 -> 10L, V4 -> 1L),
+        FROMBASE58,
+        BYTESTR,
+        ("str", STRING)
+      ) {
         case CONST_STRING(str: String) :: Nil => global.base58Decode(str, global.MaxBase58String).flatMap(x => CONST_BYTESTR(ByteStr(x)))
         case xs                               => notImplemented[Id]("fromBase58String(str: String)", xs)
       }
 
-    def toBase64StringF: BaseFunction[NoContext] = NativeFunction("toBase64String", 10, TOBASE64, STRING, ("bytes", BYTESTR)) {
-      case CONST_BYTESTR(bytes: ByteStr) :: Nil => global.base64Encode(bytes.arr).flatMap(CONST_STRING(_))
-      case xs                                   => notImplemented[Id]("toBase64String(bytes: ByteVector)", xs)
+    def toBase64StringF: BaseFunction[NoContext] =
+      NativeFunction(
+        "toBase64String",
+        Map[StdLibVersion, Long](V1 -> 10L, V2 -> 10L, V3 -> 10L, V4 -> 35L),
+        TOBASE64,
+        STRING,
+        ("bytes", BYTESTR)
+      ) {
+      case CONST_BYTESTR(bytes: ByteStr) :: Nil => global.base64Encode(bytes.arr).flatMap(CONST_STRING(_, reduceLimit = version >= V4))
+      case xs                                   => notImplemented[Id, EVALUATED]("toBase64String(bytes: ByteVector)", xs)
     }
 
     def fromBase64StringF: BaseFunction[NoContext] =
-      NativeFunction("fromBase64String", 10, FROMBASE64, BYTESTR, ("str", STRING)) {
+      NativeFunction(
+        "fromBase64String",
+        Map[StdLibVersion, Long](V1 -> 10L, V2 -> 10L, V3 -> 10L, V4 -> 40L),
+        FROMBASE64,
+        BYTESTR,
+        ("str", STRING)
+      ) {
         case CONST_STRING(str: String) :: Nil => global.base64Decode(str, global.MaxBase64String).flatMap(x => CONST_BYTESTR(ByteStr(x)))
         case xs                               => notImplemented[Id]("fromBase64String(str: String)", xs)
       }

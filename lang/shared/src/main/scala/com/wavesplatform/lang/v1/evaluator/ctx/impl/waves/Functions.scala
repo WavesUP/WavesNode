@@ -5,7 +5,7 @@ import cats.{Id, Monad}
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2
 import com.wavesplatform.lang.ExecutionError
-import com.wavesplatform.lang.directives.values.StdLibVersion
+import com.wavesplatform.lang.directives.values._
 import com.wavesplatform.lang.v1.FunctionHeader
 import com.wavesplatform.lang.v1.compiler.Terms
 import com.wavesplatform.lang.v1.compiler.Terms._
@@ -26,7 +26,7 @@ object Functions {
     val args = Seq(("addressOrAlias", addressOrAliasType), ("key", STRING))
     NativeFunction.withEnvironment[Environment](
       name,
-      100,
+      Map[StdLibVersion, Long](V1 -> 100L, V2 -> 100L, V3 -> 100L, V4 -> 25L),
       internalName,
       UNION(dataType.innerType, UNIT),
       ("addressOrAlias", addressOrAliasType),
@@ -94,7 +94,7 @@ object Functions {
   private def getDataByIndexF(name: String, dataType: DataType, version: StdLibVersion): BaseFunction[Environment] =
     UserFunction(
       name,
-      30,
+      Map[StdLibVersion, Long](V1 -> 30L, V2 -> 30L, V3 -> 30L, V4 -> 4L),
       UNION(dataType.innerType, UNIT),
       ("@data", LIST(UNIT)),
       ("@index", LONG)
@@ -118,17 +118,23 @@ object Functions {
   def getStringByIndexF(v: StdLibVersion): BaseFunction[Environment]  = getDataByIndexF("getString", DataType.String, v)
 
   private def secureHashExpr(xs: EXPR): EXPR = FUNCTION_CALL(
-    FunctionHeader.Native(KECCAK256),
+    FunctionHeader.Native(KECCAK256_LIM),
     List(
       FUNCTION_CALL(
-        FunctionHeader.Native(BLAKE256),
+        FunctionHeader.Native(BLAKE256_LIM),
         List(xs)
       )
     )
   )
 
   val addressFromPublicKeyF: BaseFunction[Environment] =
-    UserFunction.withEnvironment[Environment]("addressFromPublicKey", 82, addressType, ("@publicKey", BYTESTR))(
+    UserFunction.withEnvironment[Environment](
+      name = "addressFromPublicKey",
+      internalName = "addressFromPublicKey",
+      Map[StdLibVersion, Long](V1 -> 82L, V2 -> 82L, V3 -> 82L, V4 -> 63L),
+      addressType,
+      ("@publicKey", BYTESTR)
+    )(
       new ContextfulUserFunction[Environment] {
         override def apply[F[_]: Monad](env: Environment[F]): EXPR =
           FUNCTION_CALL(
@@ -259,7 +265,7 @@ object Functions {
   val addressFromRecipientF: BaseFunction[Environment] =
     NativeFunction.withEnvironment[Environment](
       "addressFromRecipient",
-      100,
+      Map[StdLibVersion, Long](V1 -> 100L, V2 -> 100L, V3 -> 100L, V4 -> 10L),
       ADDRESSFROMRECIPIENT,
       addressType,
       ("AddressOrAlias", addressOrAliasType)
@@ -301,7 +307,7 @@ object Functions {
   val assetBalanceF: BaseFunction[Environment] =
     NativeFunction.withEnvironment[Environment](
       "assetBalance",
-      100,
+      Map[StdLibVersion, Long](V1 -> 100L, V2 -> 100L, V3 -> 100L, V4 -> 15L),
       ACCOUNTASSETBALANCE,
       LONG,
       ("addressOrAlias", addressOrAliasType),
@@ -316,7 +322,52 @@ object Functions {
             case (env, (c: CaseObj) :: CONST_BYTESTR(assetId: ByteStr) :: Nil) =>
               env.accountBalanceOf(caseObjToRecipient(c), Some(assetId.arr)).map(_.map(CONST_LONG))
 
-            case (_, xs) => notImplemented[F](s"assetBalance(a: Address|Alias, u: ByteVector|Unit)", xs)
+            case (_, xs) => notImplemented[F, EVALUATED](s"assetBalance(a: Address|Alias, u: ByteVector|Unit)", xs)
+          }
+      }
+    }
+
+  val assetBalanceV4F: BaseFunction[Environment] =
+    NativeFunction.withEnvironment[Environment](
+      "assetBalance",
+      100,
+      ACCOUNTASSETONLYBALANCE,
+      LONG,
+      ("addressOrAlias", addressOrAliasType),
+      ("assetId", BYTESTR)
+    ) {
+      new ContextfulNativeFunction[Environment]("assetBalance", LONG, Seq(("addressOrAlias", addressOrAliasType),("assetId", BYTESTR))) {
+        override def ev[F[_]: Monad](input: (Environment[F], List[EVALUATED])): F[Either[ExecutionError, EVALUATED]] =
+          input match {
+            case (env, (c: CaseObj) :: CONST_BYTESTR(assetId: ByteStr) :: Nil) =>
+              env.accountBalanceOf(caseObjToRecipient(c), Some(assetId.arr)).map(_.map(CONST_LONG))
+
+            case (_, xs) => notImplemented[F, EVALUATED](s"assetBalance(a: Address|Alias, u: ByteVector)", xs)
+          }
+      }
+    }
+
+
+  val wavesBalanceV4F: BaseFunction[Environment] =
+    NativeFunction.withEnvironment[Environment](
+      "wavesBalance",
+      Map[StdLibVersion, Long](V1 -> 100L, V2 -> 100L, V3 -> 100L, V4 -> 10L),
+      ACCOUNTWAVESBALANCE,
+      balanceDetailsType,
+      ("addressOrAlias", addressOrAliasType)
+    ) {
+      new ContextfulNativeFunction[Environment]("wavesBalance", LONG, Seq(("addressOrAlias", addressOrAliasType))) {
+        override def ev[F[_]: Monad](input: (Environment[F], List[EVALUATED])): F[Either[ExecutionError, EVALUATED]] =
+          input match {
+            case (env, (c: CaseObj) :: Nil) =>
+              env.accountWavesBalanceOf(caseObjToRecipient(c)).map(_.map(b => CaseObj(balanceDetailsType, Map(
+                "available" -> CONST_LONG(b.available),
+                "regular" -> CONST_LONG(b.regular),
+                "generating" -> CONST_LONG(b.generating),
+                "effective" -> CONST_LONG(b.effective)
+                ))))
+
+            case (_, xs) => notImplemented[F, EVALUATED](s"wavesBalance(a: Address|Alias)", xs)
           }
       }
     }
@@ -324,7 +375,7 @@ object Functions {
   def assetInfoF(version: StdLibVersion): BaseFunction[Environment] =
     NativeFunction.withEnvironment[Environment](
       "assetInfo",
-      100,
+      Map[StdLibVersion, Long](V1 -> 100L, V2 -> 100L, V3 -> 100L, V4 -> 50L),
       GETASSETINFOBYID,
       optionAsset,
       ("id", BYTESTR)
@@ -352,7 +403,7 @@ object Functions {
   val txHeightByIdF: BaseFunction[Environment] =
     NativeFunction.withEnvironment[Environment](
       "transactionHeightById",
-      100,
+      Map[StdLibVersion, Long](V1 -> 100L, V2 -> 100L, V3 -> 100L, V4 -> 15L),
       TRANSACTIONHEIGHTBYID,
       optionLong,
       ("id", BYTESTR)
@@ -373,7 +424,7 @@ object Functions {
   def blockInfoByHeightF(version: StdLibVersion): BaseFunction[Environment] =
     NativeFunction.withEnvironment[Environment](
       "blockInfoByHeight",
-      100,
+      Map[StdLibVersion, Long](V1 -> 100L, V2 -> 100L, V3 -> 100L, V4 -> 5L),
       BLOCKINFOBYHEIGHT,
       UNION(UNIT, blockInfo),
       ("height", LONG)
@@ -446,7 +497,7 @@ object Functions {
   def transferTxByIdF(proofsEnabled: Boolean, version: StdLibVersion): BaseFunction[Environment] =
     NativeFunction.withEnvironment[Environment](
       "transferTransactionById",
-      100,
+      Map[StdLibVersion, Long](V1 -> 100L, V2 -> 100L, V3 -> 100L, V4 -> 60L),
       TRANSFERTRANSACTIONBYID,
       UNION(buildTransferTransactionType(proofsEnabled), UNIT),
       ("id", BYTESTR)
