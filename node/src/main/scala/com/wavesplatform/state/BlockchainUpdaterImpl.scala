@@ -12,7 +12,6 @@ import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.database.Storage
 import com.wavesplatform.events.BlockchainUpdateTriggers
 import com.wavesplatform.features.BlockchainFeatures
-import com.wavesplatform.features.FeatureProvider._
 import com.wavesplatform.lang.ValidationError
 import com.wavesplatform.metrics.{TxsInBlockchainStats, _}
 import com.wavesplatform.mining.{Miner, MiningConstraint, MiningConstraints}
@@ -35,6 +34,7 @@ class BlockchainUpdaterImpl(
     wavesSettings: WavesSettings,
     time: Time,
     blockchainUpdateTriggers: BlockchainUpdateTriggers,
+    collectActiveLeases: (Int, Int) => Seq[LeaseTransaction],
     miner: Miner = _ => ()
 ) extends Blockchain
     with BlockchainUpdater
@@ -349,11 +349,14 @@ class BlockchainUpdaterImpl(
     if (leveldb.isFeatureActivated(BlockchainFeatures.LeaseExpiration, newHeight)) {
       val toHeight = newHeight - leveldb.settings.functionalitySettings.leaseExpiration
       val fromHeight = leveldb.featureActivationHeight(BlockchainFeatures.LeaseExpiration.id) match {
-        case Some(activationHeight) if activationHeight == newHeight => 1
-        case _                                                       => toHeight
+        case Some(`newHeight`) =>
+          log.trace(s"Collecting leases created up till height $toHeight")
+          1
+        case _ =>
+          log.trace(s"Collecting leases created at height $toHeight")
+          toHeight
       }
-      log.trace(s"Collecting leases created within [$fromHeight, $toHeight]")
-      leveldb.collectActiveLeases(_ => true)
+      collectActiveLeases(fromHeight, toHeight)
     } else Seq.empty
 
   private def cancelLeases(leaseTransactions: Seq[LeaseTransaction]): Map[ByteStr, Diff] =
@@ -445,7 +448,7 @@ class BlockchainUpdaterImpl(
               _ <- Either
                 .cond(
                   totalSignatureValid,
-                  Unit,
+                  (),
                   MicroBlockAppendError("Invalid total block signature", microBlock)
                 )
               blockDifferResult <- {
@@ -457,7 +460,7 @@ class BlockchainUpdaterImpl(
               val blockId = ng.createBlockId(microBlock)
               blockchainUpdateTriggers.onProcessMicroBlock(microBlock, detailedDiff, this, blockId)
               ng.append(microBlock, diff, carry, totalFee, System.currentTimeMillis, Some(blockId))
-              log.info(s"$microBlock appended with id $blockId")
+              log.info(s"MicroBlock(${blockId.trim} ~> ${microBlock.reference.trim}, txs=${microBlock.transactionData.size}) appended")
               internalLastBlockInfo.onNext(LastBlockInfo(blockId, height, score, ready = true))
 
               for {
@@ -481,7 +484,7 @@ class BlockchainUpdaterImpl(
   }
 
   override def activatedFeatures: Map[Short, Int] = readLock {
-    newlyApprovedFeatures.mapValues(_ + functionalitySettings.activationWindowSize(height)) ++ leveldb.activatedFeatures
+    (newlyApprovedFeatures.view.mapValues(_ + functionalitySettings.activationWindowSize(height)) ++ leveldb.activatedFeatures).toMap
   }
 
   override def featureVotes(height: Int): Map[Short, Int] = readLock {
@@ -522,7 +525,7 @@ class BlockchainUpdaterImpl(
   override def wavesAmount(height: Int): BigInt = readLock {
     ngState match {
       case Some(ng) if this.height == height =>
-        leveldb.wavesAmount(height - 1) + ng.reward.map(BigInt(_)).getOrElse(BigInt(0))
+        leveldb.wavesAmount(height - 1) + ng.reward.fold(BigInt(0))(BigInt(_))
       case _ => leveldb.wavesAmount(height)
     }
   }
@@ -565,7 +568,7 @@ class BlockchainUpdaterImpl(
   }
 
   override def carryFee: Long = readLock {
-    ngState.map(_.carryFee).getOrElse(leveldb.carryFee)
+    ngState.fold(leveldb.carryFee)(_.carryFee)
   }
 
   override def blockHeader(height: Int): Option[SignedBlockHeader] = readLock {
@@ -603,8 +606,8 @@ class BlockchainUpdaterImpl(
   }
 
   /** Retrieves Waves balance snapshot in the [from, to] range (inclusive) */
-  override def balanceOnlySnapshots(address: Address, h: Int, assetId: Asset = Waves): Option[(Int, Long)] = readLock {
-    compositeBlockchain.balanceOnlySnapshots(address, h, assetId)
+  override def balanceAtHeight(address: Address, h: Int, assetId: Asset = Waves): Option[(Int, Long)] = readLock {
+    compositeBlockchain.balanceAtHeight(address, h, assetId)
   }
 
   override def balanceSnapshots(address: Address, from: Int, to: Option[BlockId]): Seq[BalanceSnapshot] = readLock {
@@ -627,9 +630,6 @@ class BlockchainUpdaterImpl(
   override def accountData(acc: Address, key: String): Option[DataEntry[_]] = readLock {
     compositeBlockchain.accountData(acc, key)
   }
-
-  def collectActiveLeases(filter: LeaseTransaction => Boolean): Seq[LeaseTransaction] =
-    CompositeBlockchain.collectActiveLeases(leveldb, ngState.map(_.bestLiquidDiff))(filter)
 
   override def transactionHeight(id: ByteStr): Option[Int] = readLock {
     compositeBlockchain.transactionHeight(id)
@@ -658,7 +658,7 @@ class BlockchainUpdaterImpl(
     val microMicroForkStats       = Kamon.counter("blockchain-updater.micro-micro-fork").withoutTags()
     val microBlockForkStats       = Kamon.counter("blockchain-updater.micro-block-fork").withoutTags()
     val microBlockForkHeightStats = Kamon.histogram("blockchain-updater.micro-block-fork-height").withoutTags()
-    val forgeBlockTimeStats       = Kamon.timer("blockchain-updater.forge-block-time")
+    val forgeBlockTimeStats       = Kamon.timer("blockchain-updater.forge-block-time").withoutTags()
   }
 }
 

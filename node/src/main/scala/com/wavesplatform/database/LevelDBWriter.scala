@@ -35,8 +35,7 @@ import org.iq80.leveldb.DB
 import org.slf4j.LoggerFactory
 
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
-import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -107,7 +106,7 @@ object LevelDBWriter extends ScorexLogging {
       }
     }
 
-    recMergeFixed(wbh.head, wbh.tail, lbh.head, lbh.tail, ArrayBuffer.empty)
+    recMergeFixed(wbh.head, wbh.tail, lbh.head, lbh.tail, ArrayBuffer.empty).toSeq
   }
 
   def apply(db: DB, spendableBalanceChanged: Observer[(Address, Asset)], settings: WavesSettings): LevelDBWriter with AutoCloseable = {
@@ -333,16 +332,16 @@ abstract class LevelDBWriter private[database] (
     }
 
     for ((addressId, nftIds) <- updatedNftLists.asMap().asScala) {
-      val kCount           = Keys.nftCount(AddressId(addressId))
+      val kCount           = Keys.nftCount(AddressId(addressId.toLong))
       val previousNftCount = rw.get(kCount)
       rw.put(kCount, previousNftCount + nftIds.size())
       for ((id, idx) <- nftIds.asScala.zipWithIndex) {
-        rw.put(Keys.nftAt(AddressId(addressId), idx, id), Some(()))
+        rw.put(Keys.nftAt(AddressId(addressId.toLong), idx, id), Some(()))
       }
     }
 
     changedAssetBalances.asMap().forEach { (asset, addresses) =>
-      rw.put(Keys.changedBalances(height, asset), addresses.asScala.map(AddressId(_)).toSeq)
+      rw.put(Keys.changedBalances(height, asset), addresses.asScala.map(id => AddressId(id.toLong)).toSeq)
     }
   }
 
@@ -513,7 +512,7 @@ abstract class LevelDBWriter private[database] (
           approvedFeaturesCache = newlyApprovedFeatures ++ rw.get(Keys.approvedFeatures)
           rw.put(Keys.approvedFeatures, approvedFeaturesCache)
 
-          val featuresToSave = newlyApprovedFeatures.mapValues(_ + activationWindowSize) ++ rw.get(Keys.activatedFeatures)
+          val featuresToSave = (newlyApprovedFeatures.view.mapValues(_ + activationWindowSize) ++ rw.get(Keys.activatedFeatures)).toMap
 
           activatedFeaturesCache = featuresToSave ++ settings.functionalitySettings.preActivatedFeatures
           rw.put(Keys.activatedFeatures, featuresToSave)
@@ -816,7 +815,7 @@ abstract class LevelDBWriter private[database] (
     .recordStats()
     .build[(Int, AddressId), LeaseBalance]()
 
-  override def balanceOnlySnapshots(address: Address, height: Int, assetId: Asset = Waves): Option[(Int, Long)] = readOnly { db =>
+  override def balanceAtHeight(address: Address, height: Int, assetId: Asset = Waves): Option[(Int, Long)] = readOnly { db =>
     db.get(Keys.addressId(address)).flatMap { addressId =>
       assetId match {
         case Waves =>
@@ -846,26 +845,6 @@ abstract class LevelDBWriter private[database] (
     }
   }
 
-  override def collectActiveLeases(filter: LeaseTransaction => Boolean): Seq[LeaseTransaction] = readOnly { db =>
-    val activeLeaseIds = mutable.Set.empty[ByteStr]
-    db.iterateOver(KeyTags.LeaseStatus) { e =>
-      val leaseId = e.getKey.slice(2, e.getKey.length - 4)
-      if (e.getValue.headOption.contains(1.toByte)) {
-        activeLeaseIds += ByteStr(leaseId)
-      } else {
-        activeLeaseIds -= ByteStr(leaseId)
-      }
-    }
-
-    val activeLeaseTransactions = for {
-      leaseId <- activeLeaseIds
-      (h, n)  <- db.get(Keys.transactionHNById(TransactionId(leaseId)))
-      tx      <- db.get(Keys.transactionAt(h, n)).collect { case (lt: LeaseTransaction, true) if filter(lt) => lt }
-    } yield tx
-
-    activeLeaseTransactions.toSeq
-  }
-
   def loadScoreOf(blockId: ByteStr): Option[BigInt] = {
     readOnly(db => db.get(Keys.heightOf(blockId)).map(h => db.get(Keys.score(h))))
   }
@@ -888,11 +867,13 @@ abstract class LevelDBWriter private[database] (
       .flatMap { h =>
         val height = Height(h)
         db.get(Keys.blockMetaAt(height))
-          .map(_.header.featureVotes.toSeq)
+          .map(_.header.featureVotes)
           .getOrElse(Seq.empty)
       }
       .groupBy(identity)
+      .view
       .mapValues(_.size)
+      .toMap
   }
 
   override def blockRewardVotes(height: Int): Seq[Long] = readOnly { db =>

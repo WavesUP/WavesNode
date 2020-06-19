@@ -112,5 +112,5 @@ class MiningFailuresSuite extends FlatSpec with Matchers with PrivateMethodTeste
   }
 
   private[this] def generateBlockTask(miner: MinerImpl)(account: KeyPair): Task[Unit] =
-    miner.invokePrivate(PrivateMethod[Task[Unit]]('generateBlockTask)(account, None))
+    miner.invokePrivate(PrivateMethod[Task[Unit]](Symbol("generateBlockTask"))(account, None))
 }
