@@ -103,7 +103,7 @@ object Dependencies {
       compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
       "com.softwaremill.sttp" %%% "core" % "1.6.4",
       "com.wavesplatform"     % "zwaves" % "0.1.0-SNAPSHOT",
-      "org.web3j" % "crypto" % "4.5.18"
+      "org.web3j"             % "crypto" % "4.5.18"
     ) ++ scalapbRuntime.value ++ circe.value
   )
 
@@ -160,13 +160,12 @@ object Dependencies {
       nettyModule("handler"),
       akkaModule("testkit")               % Test,
       akkaHttpModule("akka-http-testkit") % Test,
-      ("org.iq80.leveldb" % "leveldb" % "0.12").exclude("com.google.guava", "guava") % Test,
-      "com.github.romix" % "java-concurrent-hash-trie-map" % "0.2.23"
+      ("org.iq80.leveldb" % "leveldb" % "0.12").exclude("com.google.guava", "guava") % Test
     ) ++ protobuf.value ++ test ++ console ++ logDeps ++ levelDBJNA
   )
 
   private[this] val protoSchemasLib =
-     "com.wavesplatform" % "protobuf-schemas" % "1.2.6-SNAPSHOT" classifier "proto"
+    "com.wavesplatform" % "protobuf-schemas" % "1.2.6-SNAPSHOT" classifier "proto"
 
   lazy val scalapbRuntime = Def.setting {
     val version = scalapb.compiler.Version.scalapbVersion
