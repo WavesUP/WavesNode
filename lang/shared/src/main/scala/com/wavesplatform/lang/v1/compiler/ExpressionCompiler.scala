@@ -390,7 +390,7 @@ object ExpressionCompiler {
             Expressions
               .FUNCTION_CALL(
                 mc.position,
-                PART.VALID(mc.position, PureContext._isInstanceOf.name),
+                PART.VALID(mc.position, ???),
                 List(refTmp, Expressions.CONST_STRING(mc.position, PART.VALID(mc.position, matchType)))
               )
 

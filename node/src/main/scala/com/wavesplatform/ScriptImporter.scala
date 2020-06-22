@@ -9,11 +9,10 @@ import com.wavesplatform.lang.contract.DApp
 import com.wavesplatform.lang.directives.DirectiveSet
 import com.wavesplatform.lang.directives.values._
 import com.wavesplatform.lang.script.ContractScript
-import com.wavesplatform.lang.script.ContractScript.constructExprFromDeclAndContext
 import com.wavesplatform.lang.script.v1.ExprScript
 import com.wavesplatform.lang.utils._
 import com.wavesplatform.lang.v1.FunctionHeader
-import com.wavesplatform.lang.v1.compiler.Terms.{DECLARATION, EXPR}
+import com.wavesplatform.lang.v1.compiler.Terms.{DECLARATION, EXPR, FUNC}
 import com.wavesplatform.lang.v1.estimator.v3.ScriptEstimatorV3
 import com.wavesplatform.state.{Height, TxNum}
 import com.wavesplatform.transaction.assets.SetAssetScriptTransaction
@@ -40,10 +39,10 @@ object ScriptImporter extends App {
 
   println(s"Height: ${levelDBWriter.height}")
 
-  val costs: Map[StdLibVersion, Map[FunctionHeader, Coeval[Long]]] =
+  lazy val costs: Map[StdLibVersion, Map[FunctionHeader, Coeval[Long]]] =
     List(V1, V2, V3).map(v => (v, functionCosts(v))).toMap
 
-  val updatedCosts: Map[StdLibVersion, Map[FunctionHeader, Coeval[Long]]] =
+  lazy val updatedCosts: Map[StdLibVersion, Map[FunctionHeader, Coeval[Long]]] =
     costs.map {
       case (version, costs) =>
         version ->
@@ -117,9 +116,9 @@ object ScriptImporter extends App {
       dApp: DApp,
       version: StdLibVersion,
       annotationArg: Option[String],
-      function: DECLARATION
+      function: FUNC
   ): (Long, Long) =
-    estimate(constructExprFromDeclAndContext(dApp.decs, annotationArg, function), version)
+    estimate(ContractScript.constructExprFromFuncAndContext(dApp.decs, annotationArg, function), version)
 
   private def estimateExpr(script: ExprScript): (Long, Long) =
     estimate(script.expr, script.stdLibVersion)

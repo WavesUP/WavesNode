@@ -21,17 +21,12 @@ object WavesContext {
       getBooleanFromStateF,
       getBinaryFromStateF,
       getStringFromStateF,
-      getIntegerFromArrayF,
-      getBooleanFromArrayF,
-      getBinaryFromArrayF,
-      getStringFromArrayF,
-      getIntegerByIndexF,
-      getBooleanByIndexF,
-      getBinaryByIndexF,
-      getStringByIndexF,
       addressFromPublicKeyF,
       addressFromStringF,
       addressFromRecipientF,
+      )
+  private val balanceV123Functions =
+    Array(
       assetBalanceF,
       wavesBalanceF
     )
@@ -63,16 +58,42 @@ object WavesContext {
     CTX(
       variableTypes(version, proofsEnabled),
       variableVars(isTokenContext, version, ds.contentType, proofsEnabled),
-      variableFuncs(version, proofsEnabled)
+      variableFuncs(version, ds.contentType, proofsEnabled)
     )
   }
 
-  private def variableFuncs(version: StdLibVersion, proofsEnabled: Boolean) =
-    version match {
-      case V1 | V2 => Array(txByIdF(proofsEnabled, version))
-      case V3 =>
-        extractedFuncs ++ Array(assetInfoF, blockInfoByHeightF, transferTxByIdF(proofsEnabled, version), stringFromAddressF)
-    }
+  private def fromV3Funcs(proofsEnabled: Boolean, v: StdLibVersion) =
+    extractedFuncs(v) ++ Array(
+      assetInfoF(v),
+      blockInfoByHeightF(v),
+      transferTxByIdF(proofsEnabled, v),
+      stringFromAddressF
+    )
+
+  private def fromV4Funcs(proofsEnabled: Boolean, version: StdLibVersion) =
+    fromV3Funcs(proofsEnabled, version)
+
+  private def variableFuncs(version: StdLibVersion, c: ContentType, proofsEnabled: Boolean) = {
+    val commonFuncs =
+      Array(
+        getIntegerFromArrayF(version),
+        getBooleanFromArrayF(version),
+        getBinaryFromArrayF(version),
+        getStringFromArrayF(version),
+        getIntegerByIndexF(version),
+        getBooleanByIndexF(version),
+        getBinaryByIndexF(version),
+        getStringByIndexF(version),
+      )
+
+    val versionSpecificFuncs =
+      version match {
+        case V1 | V2 => Array(txByIdF(proofsEnabled, version)) ++ balanceV123Functions
+        case V3      => fromV3Funcs(proofsEnabled, version) ++ balanceV123Functions
+        case V4      => fromV4Funcs(proofsEnabled, version)
+     }
+    commonFuncs ++ versionSpecificFuncs
+  }
 
   private def variableVars(
     isTokenContext: Boolean,
@@ -84,14 +105,15 @@ object WavesContext {
     version match {
       case V1 => Map(txVal)
       case V2 => Map(sell, buy, txVal)
-      case V3 =>
+      case V3 | V4 =>
         val `this` = if (isTokenContext) assetThis else accountThis
-        val txO = if (contentType == Expression) Map(txVal) else Map()
+        val txO    = if (contentType == Expression) Map(txVal) else Map()
         val common = Map(sell, buy, lastBlock, `this`)
         common ++ txO
     }
   }
 
   private def variableTypes(version: StdLibVersion, proofsEnabled: Boolean) =
-    buildWavesTypes(proofsEnabled, version) ++ (if (version == V3) dAppTypes else Nil)
+    buildWavesTypes(proofsEnabled, version)           ++
+    (if (version >= V3) dAppTypes else Nil)
 }

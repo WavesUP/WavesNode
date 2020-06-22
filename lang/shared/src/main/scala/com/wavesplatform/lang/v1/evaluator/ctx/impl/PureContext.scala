@@ -1,26 +1,30 @@
 package com.wavesplatform.lang.v1.evaluator.ctx.impl
 
-import java.nio.charset.{MalformedInputException, StandardCharsets}
 import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.charset.{MalformedInputException, StandardCharsets}
 import java.nio.{BufferUnderflowException, ByteBuffer}
 
 import cats.Id
 import cats.implicits._
 import cats.kernel.Monoid
+import com.google.common.annotations.VisibleForTesting
 import com.wavesplatform.common.state.ByteStr
 import com.wavesplatform.common.utils.EitherExt2
+import com.wavesplatform.lang.directives.DirectiveSet
 import com.wavesplatform.lang.directives.values._
+import com.wavesplatform.lang.utils._
+import com.wavesplatform.lang.v1.ContractLimits._
 import com.wavesplatform.lang.v1.FunctionHeader.{Native, User}
 import com.wavesplatform.lang.v1.compiler.Terms._
 import com.wavesplatform.lang.v1.compiler.Types._
-import com.wavesplatform.lang.v1.evaluator.FunctionIds._
+import com.wavesplatform.lang.v1.compiler.{CompilerContext, ExpressionCompiler, Terms}
 import com.wavesplatform.lang.v1.evaluator.Contextful.NoContext
 import com.wavesplatform.lang.v1.evaluator.ContextfulVal
+import com.wavesplatform.lang.v1.evaluator.FunctionIds._
 import com.wavesplatform.lang.v1.evaluator.ctx._
 import com.wavesplatform.lang.v1.parser.BinaryOperation
 import com.wavesplatform.lang.v1.parser.BinaryOperation._
 import com.wavesplatform.lang.v1.{BaseGlobal, CTX}
-import com.wavesplatform.lang.v1.ContractLimits._
 
 import scala.annotation.tailrec
 import scala.util.{Success, Try}
@@ -61,16 +65,13 @@ object PureContext {
 
   lazy val eq: BaseFunction[NoContext] =
     NativeFunction(EQ_OP.func, 1, EQ, BOOLEAN, ("a", TYPEPARAM('T')), ("b", TYPEPARAM('T'))) {
-      case a :: b :: Nil => Either.cond(b.weight <= MaxCmpWeight || a.weight <= MaxCmpWeight, CONST_BOOLEAN(a == b), "Comparable value too heavy.")
-      case xs            => notImplemented[Id](s"${EQ_OP.func}(a: T, b: T)", xs)
+      case a :: b :: Nil =>
+        Either.cond(b.weight <= MaxCmpWeight || a.weight <= MaxCmpWeight, CONST_BOOLEAN(a == b), "Comparable value too heavy.")
+      case xs => notImplemented[Id](s"${EQ_OP.func}(a: T, b: T)", xs)
     }
 
   lazy val ne: BaseFunction[NoContext] =
-    UserFunction(NE_OP.func,
-                 Map[StdLibVersion, Long](V1 -> 26, V2 -> 26, V3 -> 1),
-                 BOOLEAN,
-                 ("@a", TYPEPARAM('T')),
-                 ("@b", TYPEPARAM('T'))) {
+    UserFunction(NE_OP.func, Map[StdLibVersion, Long](V1 -> 26, V2 -> 26, V3 -> 1, V4 -> 1), BOOLEAN, ("@a", TYPEPARAM('T')), ("@b", TYPEPARAM('T'))) {
       FUNCTION_CALL(uNot, List(FUNCTION_CALL(eq, List(REF("@a"), REF("@b")))))
     }
 
@@ -79,7 +80,11 @@ object PureContext {
     case _                      => Left(defaultThrowMessage)
   }
 
-  lazy val throwNoMessage: BaseFunction[NoContext] = UserFunction("throw", Map[StdLibVersion, Long](V1 -> 2, V2 -> 2, V3 -> 1), NOTHING) {
+  lazy val throwNoMessage: BaseFunction[NoContext] = UserFunction(
+    "throw",
+    Map[StdLibVersion, Long](V1 -> 2, V2 -> 2, V3 -> 1, V4 -> 1),
+    NOTHING
+  ) {
     FUNCTION_CALL(throwWithMessage, List(CONST_STRING(defaultThrowMessage).explicitGet()))
   }
 
@@ -111,12 +116,27 @@ object PureContext {
       )
     }
 
+  lazy val valueOrElse: BaseFunction[NoContext] =
+    UserFunction(
+      "valueOrElse",
+      13L,
+      TYPEPARAM('T'),
+      ("@value", PARAMETERIZEDUNION(List(TYPEPARAM('T'), UNIT))),
+      ("@alternative", TYPEPARAM('T'))
+    ) {
+      IF(
+        FUNCTION_CALL(eq, List(REF("@value"), REF("unit"))),
+        REF("@alternative"),
+        REF("@value")
+      )
+    }
+
   lazy val valueOrErrorMessage: BaseFunction[NoContext] =
     UserFunction(
       "valueOrErrorMessage",
       13,
       TYPEPARAM('T'),
-      ("@a",   PARAMETERIZEDUNION(List(TYPEPARAM('T'), UNIT))),
+      ("@a", PARAMETERIZEDUNION(List(TYPEPARAM('T'), UNIT))),
       ("@msg", STRING)
     ) {
       IF(
@@ -129,7 +149,7 @@ object PureContext {
   lazy val isDefined: BaseFunction[NoContext] =
     UserFunction(
       "isDefined",
-      Map[StdLibVersion, Long](V1 -> 35, V2 -> 35, V3 -> 1),
+      Map[StdLibVersion, Long](V1 -> 35, V2 -> 35, V3 -> 1, V4 -> 1),
       BOOLEAN,
       ("@a", PARAMETERIZEDUNION(List(TYPEPARAM('T'), UNIT)))
     ) {
@@ -146,28 +166,34 @@ object PureContext {
       ("numerator", LONG),
       ("denominator", LONG)
     ) {
-    case CONST_LONG(v) :: CONST_LONG(n) :: CONST_LONG(d) :: Nil =>
-      lazy val result = BigInt(v) * n / d
-      for {
-        _ <- Either.cond(result < Long.MaxValue, (), s"Long overflow: value `$result` greater than 2^63-1")
-        _ <- Either.cond(result > Long.MinValue, (), s"Long overflow: value `$result` less than -2^63-1")
-      } yield CONST_LONG(result.toLong)
-    case xs => notImplemented[Id]("fraction(value: Int, numerator: Int, denominator: Int)", xs)
-  }
+      case CONST_LONG(v) :: CONST_LONG(n) :: CONST_LONG(d) :: Nil =>
+        lazy val result = BigInt(v) * n / d
+        for {
+          _ <- Either.cond(result < Long.MaxValue, (), s"Long overflow: value `$result` greater than 2^63-1")
+          _ <- Either.cond(result > Long.MinValue, (), s"Long overflow: value `$result` less than -2^63-1")
+        } yield CONST_LONG(result.toLong)
+      case xs => notImplemented[Id]("fraction(value: Int, numerator: Int, denominator: Int)", xs)
+    }
 
-  lazy val _isInstanceOf: BaseFunction[NoContext] = NativeFunction("_isInstanceOf",
-                                                        1,
-                                                        ISINSTANCEOF,
-                                                        BOOLEAN,
-                                                        ("obj", TYPEPARAM('T')),
-                                                        ("of", STRING)) {
-    case CONST_BOOLEAN(_) :: CONST_STRING("Boolean") :: Nil    => Right(TRUE)
-    case CONST_BYTESTR(_) :: CONST_STRING("ByteVector") :: Nil => Right(TRUE)
-    case CONST_STRING(_) :: CONST_STRING("String") :: Nil      => Right(TRUE)
-    case CONST_LONG(_) :: CONST_STRING("Int") :: Nil           => Right(TRUE)
-    case (p: CaseObj) :: CONST_STRING(s) :: Nil                => Right(CONST_BOOLEAN(p.caseType.name == s))
-    case _                                                     => Right(FALSE)
-  }
+  private val plainTypeRegex = "\\w*".r
+
+  lazy val old_isInstanceOf: BaseFunction[NoContext] =
+    NativeFunction("_isInstanceOf", 1, ISINSTANCEOF, BOOLEAN, ("obj", TYPEPARAM('T')), ("of", STRING)) {
+      case CONST_BOOLEAN(_) :: CONST_STRING("Boolean") :: Nil    => Right(TRUE)
+      case CONST_BYTESTR(_) :: CONST_STRING("ByteVector") :: Nil => Right(TRUE)
+      case CONST_STRING(_) :: CONST_STRING("String") :: Nil      => Right(TRUE)
+      case CONST_LONG(_) :: CONST_STRING("Int") :: Nil           => Right(TRUE)
+      case (p: CaseObj) :: CONST_STRING(s) :: Nil                => Right(CONST_BOOLEAN(p.caseType.name == s))
+      case _                                                     => Right(FALSE)
+    }
+
+  def _isInstanceOf(compilerContext: => CompilerContext): BaseFunction[NoContext] =
+    NativeFunction("_isInstanceOf", 1, ISINSTANCEOF, BOOLEAN, ("obj", TYPEPARAM('T')), ("of", STRING)) {
+      case (value: EVALUATED) :: CONST_STRING(expectedType) :: Nil =>
+        ???
+      case _ =>
+        Right(FALSE)
+    }
 
   lazy val sizeBytes: BaseFunction[NoContext] = NativeFunction("size", 1, SIZE_BYTES, LONG, ("byteVector", BYTESTR)) {
     case CONST_BYTESTR(bv) :: Nil => Right(CONST_LONG(bv.arr.length))
@@ -263,7 +289,7 @@ object PureContext {
       case xs                                            => notImplemented[Id]("take(xs: String, number: Int)", xs)
     }
 
-  lazy val listConstructor: NativeFunction[NoContext] =
+  def listConstructor(checkSize: Boolean): NativeFunction[NoContext] =
     NativeFunction(
       "cons",
       2,
@@ -273,7 +299,7 @@ object PureContext {
       ("tail", PARAMETERIZEDLIST(TYPEPARAM('B')))
     ) {
       case h :: (a @ ARR(t)) :: Nil => ARR(h +: t, h.weight + a.weight + ELEM_WEIGHT)
-      case xs                 => notImplemented[Id]("cons(head: T, tail: LIST[T]", xs)
+      case xs                       => notImplemented[Id]("cons(head: T, tail: LIST[T]", xs)
     }
 
   lazy val dropString: BaseFunction[NoContext] =
@@ -318,7 +344,7 @@ object PureContext {
 
   val UTF8Decoder = UTF_8.newDecoder
 
-  lazy val toUtf8String: BaseFunction[NoContext] =
+  def toUtf8String(version: StdLibVersion): BaseFunction[NoContext] =
     NativeFunction("toUtf8String", 20, UTF8STRING, STRING, ("u", BYTESTR)) {
       case CONST_BYTESTR(u) :: Nil =>
         Try(ByteBuffer.wrap(u.arr))
@@ -335,16 +361,18 @@ object PureContext {
 
   lazy val toLong: BaseFunction[NoContext] =
     NativeFunction("toInt", 10, BININT, LONG, ("bin", BYTESTR)) {
-      case CONST_BYTESTR(u) :: Nil => Try(CONST_LONG(ByteBuffer.wrap(u.arr).getLong())).toEither.left.map {
-        case _:BufferUnderflowException => "Buffer underflow"
-        case e => e.toString
-      }
-      case xs                      => notImplemented[Id]("toInt(u: ByteVector)", xs)
+      case CONST_BYTESTR(u) :: Nil =>
+        Try(CONST_LONG(ByteBuffer.wrap(u.arr).getLong())).toEither.left.map {
+          case _: BufferUnderflowException => "Buffer underflow"
+          case e                           => e.toString
+        }
+      case xs => notImplemented[Id]("toInt(u: ByteVector)", xs)
     }
 
   lazy val toLongOffset: BaseFunction[NoContext] =
     NativeFunction("toInt", 10, BININT_OFF, LONG, ("bin", BYTESTR), ("offset", LONG)) {
-      case CONST_BYTESTR(ByteStr(u)) :: CONST_LONG(o) :: Nil => if( o >= 0 && o <= u.size - 8) {
+      case CONST_BYTESTR(ByteStr(u)) :: CONST_LONG(o) :: Nil =>
+        if (o >= 0 && o <= u.size - 8) {
           Try(CONST_LONG(ByteBuffer.wrap(u).getLong(o.toInt))).toEither.left.map {
             case _: BufferUnderflowException => "Buffer underflow"
             case e                           => e.toString
@@ -357,30 +385,32 @@ object PureContext {
 
   lazy val indexOf: BaseFunction[NoContext] =
     NativeFunction("indexOf", 20, INDEXOF, optionLong, ("str", STRING), ("substr", STRING)) {
-      case CONST_STRING(m) :: CONST_STRING(sub) :: Nil => Right({
-        val i = m.indexOf(sub)
-         if( i != -1 ) {
-           CONST_LONG(i.toLong)
-         } else {
-           unit
-         }
-      })
-      case xs                      => notImplemented[Id]("indexOf(str: String, substr: String)", xs)
+      case CONST_STRING(m) :: CONST_STRING(sub) :: Nil =>
+        Right({
+          val i = m.indexOf(sub)
+          if (i != -1) {
+            CONST_LONG(i.toLong)
+          } else {
+            unit
+          }
+        })
+      case xs => notImplemented[Id]("indexOf(str: String, substr: String)", xs)
     }
 
   lazy val indexOfN: BaseFunction[NoContext] =
     NativeFunction("indexOf", 20, INDEXOFN, optionLong, ("str", STRING), ("substr", STRING), ("offset", LONG)) {
-      case CONST_STRING(m) :: CONST_STRING(sub) :: CONST_LONG(off) :: Nil => Right( if(off >= 0 && off <= m.length) {
-         val i = m.indexOf(sub, off.toInt)
-         if( i != -1 ) {
-           CONST_LONG(i.toLong)
-         } else {
-           unit
-         }
-      } else {
-        unit
-      } )
-      case xs                      => notImplemented[Id]("indexOf(str: String, substr: String, offset: Int)", xs)
+      case CONST_STRING(m) :: CONST_STRING(sub) :: CONST_LONG(off) :: Nil =>
+        Right(if (off >= 0 && off <= m.length) {
+          val i = m.indexOf(sub, off.toInt)
+          if (i != -1) {
+            CONST_LONG(i.toLong)
+          } else {
+            unit
+          }
+        } else {
+          unit
+        })
+      case xs => notImplemented[Id]("indexOf(str: String, substr: String, offset: Int)", xs)
     }
 
   lazy val lastIndexOf: BaseFunction[NoContext] =
@@ -389,7 +419,7 @@ object PureContext {
       20,
       LASTINDEXOF,
       optionLong,
-      ("str",    STRING),
+      ("str", STRING),
       ("substr", STRING)
     ) {
       case CONST_STRING(m) :: CONST_STRING(sub) :: Nil =>
@@ -410,7 +440,7 @@ object PureContext {
       20,
       LASTINDEXOFN,
       optionLong,
-      ("str",    STRING),
+      ("str", STRING),
       ("substr", STRING),
       ("offset", LONG)
     ) {
@@ -483,7 +513,8 @@ object PureContext {
     }
 
   def createRawOp(op: BinaryOperation, t: TYPE, r: TYPE, func: Short, complicity: Int = 1)(
-      body: (EVALUATED, EVALUATED) => Either[String, EVALUATED]): BaseFunction[NoContext] =
+      body: (EVALUATED, EVALUATED) => Either[String, EVALUATED]
+  ): BaseFunction[NoContext] =
     NativeFunction(opsToFunctions(op), complicity, func, r, ("a", t), ("b", t)) {
       case a :: b :: Nil => body(a, b)
       case xs            => notImplemented[Id](s"${opsToFunctions(op)}(a: ${t.toString}, b: ${t.toString})", xs)
@@ -507,7 +538,7 @@ object PureContext {
         } catch {
           case e: Throwable => Left(e.getMessage)
         }
-      case xs                                    => notImplemented[Id](s"${opsToFunctions(op)}(a: ${t.toString}, b: ${t.toString})", xs)
+      case xs => notImplemented[Id](s"${opsToFunctions(op)}(a: ${t.toString}, b: ${t.toString})", xs)
     }
 
   lazy val getElement: BaseFunction[NoContext] =
@@ -534,12 +565,12 @@ object PureContext {
     }
 
   lazy val uMinus: BaseFunction[NoContext] =
-    UserFunction("-", Map[StdLibVersion, Long](V1 -> 9, V2 -> 9, V3 -> 1), LONG, ("@n", LONG)) {
+    UserFunction("-", Map[StdLibVersion, Long](V1 -> 9, V2 -> 9, V3 -> 1, V4 -> 1), LONG, ("@n", LONG)) {
       FUNCTION_CALL(subLong, List(CONST_LONG(0), REF("@n")))
     }
 
   lazy val uNot: BaseFunction[NoContext] =
-    UserFunction("!", Map[StdLibVersion, Long](V1 -> 11, V2 -> 11, V3 -> 1), BOOLEAN, ("@p", BOOLEAN)) {
+    UserFunction("!", Map[StdLibVersion, Long](V1 -> 11, V2 -> 11, V3 -> 1, V4 -> 1), BOOLEAN, ("@p", BOOLEAN)) {
       IF(REF("@p"), FALSE, TRUE)
     }
 
@@ -577,11 +608,10 @@ object PureContext {
     dropString,
     takeRightString,
     dropRightString,
-    _isInstanceOf,
     isDefined,
     extract,
     throwWithMessage,
-    throwNoMessage,
+    throwNoMessage
   ) ++ operators
 
   val roundCeiling  = CASETYPEREF("Ceiling", List.empty)
@@ -613,8 +643,8 @@ object PureContext {
   lazy val unitVarName = "unit"
 
   private def singleObj(
-    ty: CASETYPEREF,
-    v: Map[String,EVALUATED] = Map.empty
+      ty: CASETYPEREF,
+      v: Map[String, EVALUATED] = Map.empty
   ): (CASETYPEREF, ContextfulVal[NoContext]) =
     ty -> ContextfulVal.pure(CaseObj(ty, v))
 
@@ -650,14 +680,20 @@ object PureContext {
     functions
   )
 
-  def build(math: BaseGlobal, version: StdLibVersion): CTX[NoContext] = {
+  def build(math: BaseGlobal, version: StdLibVersion): CTX[NoContext] =
+    build(math, DirectiveSet(version, Account, Expression).explicitGet())
+
+  def build(math: BaseGlobal, directives: DirectiveSet, testCompilerContext: CompilerContext = CompilerContext.empty): CTX[NoContext] = {
+    val isInstanceOf =
+      if (directives.stdLibVersion >= V4)
+        _isInstanceOf(compilerContext(directives) |+| testCompilerContext)
+      else
+        old_isInstanceOf
+
+    val updatedCtx = ctx.copy(functions = ctx.functions :+ isInstanceOf)
+
     val pow: BaseFunction[NoContext] =
-      NativeFunction("pow", 100, POW, LONG,
-          ("base", LONG), ("bp", LONG),
-          ("exponent", LONG), ("ep", LONG),
-          ("rp", LONG),
-          ("round", rounds)
-       ) {
+      NativeFunction("pow", 100, POW, LONG, ("base", LONG), ("bp", LONG), ("exponent", LONG), ("ep", LONG), ("rp", LONG), ("round", rounds)) {
         case CONST_LONG(b) :: CONST_LONG(bp) :: CONST_LONG(e) :: CONST_LONG(ep) :: CONST_LONG(rp) :: round :: Nil =>
           if (bp < 0
               || bp > 8
@@ -667,18 +703,13 @@ object PureContext {
               || rp > 8) {
             Left("pow: scale out of range 0-8")
           } else {
-            math.pow(b, bp, e, ep, rp, roundMode(round)).right.map(CONST_LONG)
+            math.pow(b, bp, e, ep, rp, roundMode(round)).map(CONST_LONG)
           }
         case xs => notImplemented[Id]("pow(base: Int, bp: Int, exponent: Int, ep: Int, rp: Int, round: Rounds)", xs)
       }
 
     val log: BaseFunction[NoContext] =
-      NativeFunction("log", 100, LOG, LONG,
-          ("exponent", LONG), ("ep", LONG),
-          ("base", LONG), ("bp", LONG),
-          ("rp", LONG),
-          ("round", rounds)
-       ) {
+      NativeFunction("log", 100, LOG, LONG, ("exponent", LONG), ("ep", LONG), ("base", LONG), ("bp", LONG), ("rp", LONG), ("round", rounds)) {
         case CONST_LONG(b) :: CONST_LONG(bp) :: CONST_LONG(e) :: CONST_LONG(ep) :: CONST_LONG(rp) :: round :: Nil =>
           if (bp < 0
               || bp > 8
@@ -688,38 +719,49 @@ object PureContext {
               || rp > 8) {
             Left("log: scale out of range 0-8")
           } else {
-            math.log(b, bp, e, ep, rp, roundMode(round)).right.map(CONST_LONG)
+            math.log(b, bp, e, ep, rp, roundMode(round)).map(CONST_LONG)
           }
         case xs => notImplemented[Id]("log(exponent: Int, ep: Int, base: Int, bp: Int, rp: Int, round: Rounds)", xs)
       }
 
-    version match {
-      case V1 | V2 => ctx
-      case V3 =>
-        Monoid.combine(
-          ctx,
-          CTX[NoContext](
-            Seq.empty,
-            Map(("nil", (LIST(NOTHING), ContextfulVal.pure[NoContext](ARR(IndexedSeq.empty[EVALUATED]).explicitGet())))),
-            Array(
-              value,
-              valueOrErrorMessage,
-              listConstructor,
-              toUtf8String,
-              toLong,
-              toLongOffset,
-              indexOf,
-              indexOfN,
-              lastIndexOf,
-              lastIndexOfWithOffset,
-              splitStr,
-              parseInt,
-              parseIntVal,
-              pow,
-              log
-            )
-          )
+    val fromV3Funcs = Array(
+      value,
+      valueOrErrorMessage,
+      toUtf8String(directives.stdLibVersion),
+      toLong,
+      toLongOffset,
+      indexOf,
+      indexOfN,
+      lastIndexOf,
+      lastIndexOfWithOffset,
+      splitStr,
+      parseInt,
+      parseIntVal,
+      pow,
+      log
+    )
+
+    val v3Ctx = Monoid.combine(
+      updatedCtx,
+      CTX[NoContext](
+        Seq.empty,
+        Map(("nil", (LIST(NOTHING), ContextfulVal.pure[NoContext](ARR(IndexedSeq.empty[EVALUATED], EMPTYARR_WEIGHT).explicitGet())))),
+        fromV3Funcs :+ listConstructor(checkSize = false)
+      )
+    )
+
+    val v4Functions =
+      updatedCtx.functions ++
+        fromV3Funcs ++
+        Array(
+          valueOrElse,
+          listConstructor(checkSize = true)
         )
+
+    directives.stdLibVersion match {
+      case V1 | V2 => updatedCtx
+      case V3      => v3Ctx
+      case V4      => v3Ctx.copy(functions = v4Functions)
     }
   }
 }

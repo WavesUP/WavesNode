@@ -110,7 +110,7 @@ object ContractScript {
           Right(annotatedFunctionComplexities)
     } yield (max, complexities.toMap)
 
-  private def constructExprFromFuncAndContext(
+  def constructExprFromFuncAndContext(
       dec: List[DECLARATION],
       annotationArgNameOpt: Option[String],
       funcExpr: FUNC
