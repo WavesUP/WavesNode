@@ -118,10 +118,10 @@ object Functions {
   def getStringByIndexF(v: StdLibVersion): BaseFunction[Environment]  = getDataByIndexF("getString", DataType.String, v)
 
   private def secureHashExpr(xs: EXPR): EXPR = FUNCTION_CALL(
-    FunctionHeader.Native(KECCAK256_LIM),
+    FunctionHeader.Native(KECCAK256),
     List(
       FUNCTION_CALL(
-        FunctionHeader.Native(BLAKE256_LIM),
+        FunctionHeader.Native(BLAKE256),
         List(xs)
       )
     )
@@ -322,52 +322,7 @@ object Functions {
             case (env, (c: CaseObj) :: CONST_BYTESTR(assetId: ByteStr) :: Nil) =>
               env.accountBalanceOf(caseObjToRecipient(c), Some(assetId.arr)).map(_.map(CONST_LONG))
 
-            case (_, xs) => notImplemented[F, EVALUATED](s"assetBalance(a: Address|Alias, u: ByteVector|Unit)", xs)
-          }
-      }
-    }
-
-  val assetBalanceV4F: BaseFunction[Environment] =
-    NativeFunction.withEnvironment[Environment](
-      "assetBalance",
-      100,
-      ACCOUNTASSETONLYBALANCE,
-      LONG,
-      ("addressOrAlias", addressOrAliasType),
-      ("assetId", BYTESTR)
-    ) {
-      new ContextfulNativeFunction[Environment]("assetBalance", LONG, Seq(("addressOrAlias", addressOrAliasType),("assetId", BYTESTR))) {
-        override def ev[F[_]: Monad](input: (Environment[F], List[EVALUATED])): F[Either[ExecutionError, EVALUATED]] =
-          input match {
-            case (env, (c: CaseObj) :: CONST_BYTESTR(assetId: ByteStr) :: Nil) =>
-              env.accountBalanceOf(caseObjToRecipient(c), Some(assetId.arr)).map(_.map(CONST_LONG))
-
-            case (_, xs) => notImplemented[F, EVALUATED](s"assetBalance(a: Address|Alias, u: ByteVector)", xs)
-          }
-      }
-    }
-
-
-  val wavesBalanceV4F: BaseFunction[Environment] =
-    NativeFunction.withEnvironment[Environment](
-      "wavesBalance",
-      Map[StdLibVersion, Long](V1 -> 100L, V2 -> 100L, V3 -> 100L, V4 -> 10L),
-      ACCOUNTWAVESBALANCE,
-      balanceDetailsType,
-      ("addressOrAlias", addressOrAliasType)
-    ) {
-      new ContextfulNativeFunction[Environment]("wavesBalance", LONG, Seq(("addressOrAlias", addressOrAliasType))) {
-        override def ev[F[_]: Monad](input: (Environment[F], List[EVALUATED])): F[Either[ExecutionError, EVALUATED]] =
-          input match {
-            case (env, (c: CaseObj) :: Nil) =>
-              env.accountWavesBalanceOf(caseObjToRecipient(c)).map(_.map(b => CaseObj(balanceDetailsType, Map(
-                "available" -> CONST_LONG(b.available),
-                "regular" -> CONST_LONG(b.regular),
-                "generating" -> CONST_LONG(b.generating),
-                "effective" -> CONST_LONG(b.effective)
-                ))))
-
-            case (_, xs) => notImplemented[F, EVALUATED](s"wavesBalance(a: Address|Alias)", xs)
+            case (_, xs) => notImplemented[F](s"assetBalance(a: Address|Alias, u: ByteVector|Unit)", xs)
           }
       }
     }

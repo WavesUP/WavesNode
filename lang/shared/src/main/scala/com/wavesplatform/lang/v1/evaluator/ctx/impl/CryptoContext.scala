@@ -123,34 +123,6 @@ object CryptoContext {
       }
     }
 
-    val rsaVerifyL: Array[BaseFunction[NoContext]] = lgen(
-      Array(16, 32, 64, 128),
-      (n => (s"rsaVerify_${n._1}Kb", (RSAVERIFY_LIM + n._2).toShort)),
-      ({
-        case 16  => 500
-        case 32  => 550
-        case 64  => 625
-        case 128 => 750
-      }),
-      (n => {
-        case _ :: CONST_BYTESTR(msg: ByteStr) :: _ => Either.cond(msg.size <= n * 1024, (), s"Invalid message size = ${msg.size} bytes, must be not greater than $n KB")
-        case xs =>
-          notImplemented[Id, Unit](s"rsaVerify_${n}Kb(digest: DigestAlgorithmType, message: ByteVector, sig: ByteVector, pub: ByteVector)", xs)
-      }),
-      BOOLEAN,
-      ("digest", digestAlgorithmType(V4)),
-      ("message", BYTESTR),
-      ("sig", BYTESTR),
-      ("pub", BYTESTR)
-    ) {
-      case (digestAlg: CaseObj) :: CONST_BYTESTR(msg: ByteStr) :: CONST_BYTESTR(sig: ByteStr) :: CONST_BYTESTR(pub: ByteStr) :: Nil =>
-        algFromCO(digestAlg) flatMap { alg =>
-          Try(global.rsaVerify(alg, msg.arr, sig.arr, pub.arr)).toEither
-            .bimap(_ => "Illegal input params", CONST_BOOLEAN)
-        }
-      case xs => notImplemented[Id, EVALUATED](s"rsaVerify(digest: DigestAlgorithmType, message: ByteVector, sig: ByteVector, pub: ByteVector)", xs)
-    }
-
     def toBase58StringF: BaseFunction[NoContext] =
       NativeFunction(
         "toBase58String",
@@ -158,10 +130,10 @@ object CryptoContext {
         TOBASE58,
         STRING,
         ("bytes", BYTESTR)
-      ) {
-      case CONST_BYTESTR(bytes: ByteStr) :: Nil => global.base58Encode(bytes.arr).flatMap(CONST_STRING(_, reduceLimit = version >= V4))
-      case xs                                   => notImplemented[Id, EVALUATED]("toBase58String(bytes: ByteVector)", xs)
-    }
+      )({
+      case CONST_BYTESTR(bytes: ByteStr) :: Nil => global.base58Encode(bytes.arr).flatMap(CONST_STRING(_))
+      case xs                                   => notImplemented[Id]("toBase58String(bytes: ByteVector)", xs)
+    })
 
     def fromBase58StringF: BaseFunction[NoContext] =
       NativeFunction(
@@ -183,8 +155,8 @@ object CryptoContext {
         STRING,
         ("bytes", BYTESTR)
       ) {
-      case CONST_BYTESTR(bytes: ByteStr) :: Nil => global.base64Encode(bytes.arr).flatMap(CONST_STRING(_, reduceLimit = version >= V4))
-      case xs                                   => notImplemented[Id, EVALUATED]("toBase64String(bytes: ByteVector)", xs)
+      case CONST_BYTESTR(bytes: ByteStr) :: Nil => global.base64Encode(bytes.arr).flatMap(CONST_STRING(_))
+      case xs                                   => notImplemented[Id]("toBase64String(bytes: ByteVector)", xs)
     }
 
     def fromBase64StringF: BaseFunction[NoContext] =

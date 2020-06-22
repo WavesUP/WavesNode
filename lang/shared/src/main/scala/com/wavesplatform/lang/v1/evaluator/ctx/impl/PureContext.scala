@@ -344,34 +344,8 @@ object PureContext {
       ("head", TYPEPARAM('A')),
       ("tail", PARAMETERIZEDLIST(TYPEPARAM('B')))
     ) {
-      case h :: (a @ ARR(t)) :: Nil => ARR(h +: t, h.weight + a.weight + ELEM_WEIGHT, checkSize)
-      case xs                       => notImplemented[Id, EVALUATED]("cons(head: T, tail: LIST[T]", xs)
-    }
-
-  lazy val listAppend: NativeFunction[NoContext] =
-    NativeFunction(
-      LIST_APPEND_OP.func,
-      Map[StdLibVersion, Long](V1 -> 3L, V2 -> 3L, V3 -> 3L, V4 -> 1L),
-      APPEND_LIST,
-      PARAMETERIZEDLIST(PARAMETERIZEDUNION(List(TYPEPARAM('A'), TYPEPARAM('B')))),
-      ("list", PARAMETERIZEDLIST(TYPEPARAM('A'))),
-      ("element", TYPEPARAM('B'))
-    ) {
-      case (a @ ARR(list)) :: element :: Nil => ARR(list :+ element, a.weight + element.weight + ELEM_WEIGHT, true)
-      case xs                                => notImplemented[Id, EVALUATED](s"list: List[T] ${LIST_APPEND_OP.func} value: T", xs)
-    }
-
-  lazy val listConcat: NativeFunction[NoContext] =
-    NativeFunction(
-      LIST_CONCAT_OP.func,
-      Map[StdLibVersion, Long](V1 -> 10L, V2 -> 10L, V3 -> 10L, V4 -> 4L),
-      CONCAT_LIST,
-      PARAMETERIZEDLIST(PARAMETERIZEDUNION(List(TYPEPARAM('A'), TYPEPARAM('B')))),
-      ("list1", PARAMETERIZEDLIST(TYPEPARAM('A'))),
-      ("list2", PARAMETERIZEDLIST(TYPEPARAM('B')))
-    ) {
-      case (a1 @ ARR(l1)) :: (a2 @ ARR(l2)) :: Nil => ARR(l1 ++ l2, a1.weight + a2.weight - EMPTYARR_WEIGHT, true)
-      case xs                                      => notImplemented[Id, EVALUATED](s"list1: List[T] ${LIST_CONCAT_OP.func} list2: List[T]", xs)
+      case h :: (a @ ARR(t)) :: Nil => ARR(h +: t, h.weight + a.weight + ELEM_WEIGHT)
+      case xs                       => notImplemented[Id]("cons(head: T, tail: LIST[T]", xs)
     }
 
   lazy val dropString: BaseFunction[NoContext] =
@@ -599,21 +573,6 @@ object PureContext {
       )
   }
 
-  lazy val makeString: BaseFunction[NoContext] =
-    NativeFunction("makeString", 30, MAKESTRING, STRING, ("list", LIST(STRING)), ("separator", STRING)) {
-      case (arr: ARR) :: CONST_STRING(separator) :: Nil =>
-        val separatorStringSize =
-          if (arr.xs.length > 1) (arr.xs.length - 1) * separator.length
-          else 0
-        val expectedStringSize = arr.elementsWeightSum + separatorStringSize
-        if (expectedStringSize <= DataEntryValueMax)
-          CONST_STRING(arr.xs.mkString(separator))
-        else
-          Left(s"Constructing string size = $expectedStringSize bytes will exceed $DataEntryValueMax")
-      case xs =>
-        notImplemented[Id, EVALUATED]("makeString(list: List[String], separator: String)", xs)
-    }
-
   lazy val contains: BaseFunction[NoContext] =
     UserFunction(
       "contains",
@@ -670,7 +629,7 @@ object PureContext {
   ): BaseFunction[NoContext] =
     NativeFunction(opsToFunctions(op), complexity, func, r, ("a", t), ("b", t)) {
       case a :: b :: Nil => body(a, b)
-      case xs            => notImplemented[Id, EVALUATED](s"${opsToFunctions(op)}(a: ${t.toString}, b: ${t.toString})", xs)
+      case xs            => notImplemented[Id](s"${opsToFunctions(op)}(a: ${t.toString}, b: ${t.toString})", xs)
     }
 
   def createOp(op: BinaryOperation, t: TYPE, r: TYPE, func: Short, complexity: Int = 1)(
