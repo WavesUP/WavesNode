@@ -75,6 +75,14 @@ object TransactionParsers {
         else oldParseBytes(headByte, data)
       }
 
+  def parseBytesSetScriptOnly(data: Array[Byte]): Try[Option[Transaction]] =
+    data.headOption
+      .fold[Try[Byte]](Failure(new IllegalArgumentException("Can't find the significant byte: the buffer is empty")))(Success(_))
+      .flatMap { headByte =>
+        if (headByte == 0) modernParseBytesSetScriptOnly(data)
+        else Try(None)
+      }
+
   def forTypes(types: Byte*): Set[TransactionParser] =
     forTypeSet(types.toSet)
 
@@ -100,6 +108,22 @@ object TransactionParsers {
         .fold[Try[TransactionParser]](
           Failure(new IllegalArgumentException(s"Unknown transaction type ($typeId) and version ($version) (modern encoding)")))(Success(_))
         .flatMap(_.parseBytes(data))
+    }
+  }
+
+  private def modernParseBytesSetScriptOnly(data: Array[Byte]): Try[Option[Transaction]] = {
+    if (data.length < 2)
+      Failure(new IllegalArgumentException(s"Can't determine the type and the version of transaction: the buffer has ${data.length} bytes"))
+    else {
+      val Array(_, typeId, version) = data.take(3)
+      if (typeId == SetScriptTransaction.typeId || typeId == SetAssetScriptTransaction.typeId)
+      modern
+        .get((typeId, version))
+        .fold[Try[TransactionParser]](
+          Failure(new IllegalArgumentException(s"Unknown transaction type ($typeId) and version ($version) (modern encoding)")))(Success(_))
+        .flatMap(_.parseBytes(data))
+        .map(Some(_))
+      else Try(None)
     }
   }
 

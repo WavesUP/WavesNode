@@ -125,6 +125,14 @@ object Keys {
       _.bytes()
     )
 
+  def transactionAtOpt(height: Height, n: TxNum): Key[Option[Option[Transaction]]] =
+    Key.opt[Option[Transaction]](
+      "nth-transaction-info-at-height",
+      hNum(TransactionInfoPrefix, height, n),
+      data => TransactionParsers.parseBytesSetScriptOnly(data).get,
+      _ => ???
+    )
+
   def transactionBytesAt(height: Height, n: TxNum): Key[Option[Array[Byte]]] =
     Key.opt(
       "nth-transaction-info-bytes-at-height",

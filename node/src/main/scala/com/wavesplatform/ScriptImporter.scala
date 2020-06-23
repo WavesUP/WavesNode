@@ -1,8 +1,9 @@
 package com.wavesplatform
 
 import java.io.{BufferedWriter, File, FileWriter}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 
-import com.wavesplatform.account.AddressScheme
+import com.wavesplatform.account.{Address, AddressScheme}
 import com.wavesplatform.common.utils.EitherExt2
 import com.wavesplatform.database.{Keys, LevelDBWriter, openDB}
 import com.wavesplatform.lang.contract.DApp
@@ -12,7 +13,7 @@ import com.wavesplatform.lang.script.ContractScript
 import com.wavesplatform.lang.script.v1.ExprScript
 import com.wavesplatform.lang.utils._
 import com.wavesplatform.lang.v1.FunctionHeader
-import com.wavesplatform.lang.v1.compiler.Terms.{DECLARATION, EXPR, FUNC}
+import com.wavesplatform.lang.v1.compiler.Terms.{EXPR, FUNC}
 import com.wavesplatform.lang.v1.estimator.v3.ScriptEstimatorV3
 import com.wavesplatform.state.{Height, TxNum}
 import com.wavesplatform.transaction.assets.SetAssetScriptTransaction
@@ -21,6 +22,8 @@ import monix.eval.Coeval
 import monix.execution.UncaughtExceptionReporter
 import monix.reactive.Observer
 import org.iq80.leveldb.DB
+
+import scala.collection.mutable
 
 object ScriptImporter extends App {
   val settings = Application.loadApplicationConfig(Some(new File("/etc/waves/waves.conf")).filter(_.exists()))
@@ -49,7 +52,7 @@ object ScriptImporter extends App {
           costs.map {
             case (header, currentCost) =>
               header ->
-                lazyContexts(DirectiveSet(version, Account, Expression).explicitGet())
+                lazyContexts(DirectiveSet(V4, Account, Expression).explicitGet())
                   .value()
                   .evaluationContext(environment)
                   .functions
@@ -60,17 +63,18 @@ object ScriptImporter extends App {
           }
     }
 
-  val allWriter = new BufferedWriter(new FileWriter("all.csv"))
-  allWriter.write("address;type;current cost;new cost\n")
+  val writer = new BufferedWriter(new FileWriter("all-updated.csv"))
+  writer.write("address;type;current cost;new cost\n")
 
-  (1 to 500000).foreach { height =>
-    if (height % 100000 == 0) println(height)
+  val scripts: ConcurrentHashMap[(Address, String), (Long, Long)] = new ConcurrentHashMap[(Address, String), (Long, Long)]()
+
+  (1190000 to levelDBWriter.height).par.foreach { height =>
+    if (height % 10000 == 0) println(height)
 
     val txCount = db.get(Keys.blockHeaderAndSizeAt(Height(height))).map(_._1.transactionCount).getOrElse(0)
-    println(txCount)
     (1 to txCount).flatMap(
       i =>
-        db.get(Keys.transactionAt(Height(height), TxNum(i.toShort)))
+        db.get(Keys.transactionAtOpt(Height(height), TxNum(i.toShort))).flatten
           .collect {
             case (SetScriptTransaction(_, sender, Some(script), _, timestamp, _)) =>
               val address = sender.toAddress
@@ -84,7 +88,7 @@ object ScriptImporter extends App {
                         Some(verifier.annotation.invocationArgName),
                         verifier.u
                       )
-                      allWriter.write(s"$address;verifier;$currentCost;$newCost\n")
+                      scripts put((address, "verifier"), (currentCost, newCost))
                     }
 
                   dApp.callableFuncs
@@ -95,22 +99,30 @@ object ScriptImporter extends App {
                         Some(callable.annotation.invocationArgName),
                         callable.u
                       )
-                      allWriter.write(s"$address;callable;$currentCost;$newCost\n")
+                      scripts put((address, "callable"), (currentCost, newCost))
                     }
 
                 case script: ExprScript =>
                   val (currentCost, newCost) = estimateExpr(script)
-                  allWriter.write(s"$address;asset;$currentCost;$newCost\n")
+                  scripts put ((address, "verifier"), (currentCost, newCost))
                 case _ =>
                   ???
               }
             case (SetAssetScriptTransaction(_, sender, _, Some(script: ExprScript), _, timestamp, _)) =>
+              val address = sender.toAddress
               val (currentCost, newCost) = estimateExpr(script)
+              scripts put ((address, "asset"), (currentCost, newCost))
           }
     )
   }
 
-  allWriter.close()
+  scripts
+    .forEach {
+      case ((address, scriptType), (currentCost, newCost)) =>
+        writer.write(s"$address;$scriptType;$currentCost;$newCost\n")
+    }
+
+  writer.close()
 
   private def estimateAnnotatedFunc(
       dApp: DApp,
